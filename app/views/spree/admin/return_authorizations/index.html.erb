@@ -1,0 +1,143 @@
+<%= render partial: 'spree/admin/shared/order_tabs', locals: { current: :return_authorizations } %>
+
+<% content_for :page_actions do %>
+  <% if @order.shipments.any?(&:shipped?) %>
+    <%= button_link_to Spree.t(:new_return_authorization), new_admin_order_return_authorization_url(@order), class: "btn-success", icon: 'add', id: 'admin_new_return_authorization' %>
+  <% end %>
+<% end %>
+
+<% if @return_authorizations.any? %>
+  <table class="table">
+    <thead>
+      <tr data-hook="return_authorizations_header">
+        <th><%= Spree.t(:number) %></th>
+        <th><%= Spree.t(:state) %></th>
+        <th><%= Spree.t(:amount) %></th>
+        <th><%= Spree.t(:created_at) %></th>
+        <th>Delhivery Return</th> 
+        <th class="actions"></th>
+      </tr>
+    </thead>
+    <tbody>
+      <% @return_authorizations.each do |return_authorization| %>
+        <tr id="<%= dom_id(return_authorization) %>" data-hook="return_authorization_row">
+          <td><%= return_authorization.number %></td>
+          <td>
+            <span class="label label-<%= return_authorization.state %>"><%= Spree.t("return_authorization_states.#{return_authorization.state}") %></span>
+          </td>
+          <td><%= return_authorization.display_amount.to_html %></td>
+          <td><%= pretty_time(return_authorization.created_at) %></td>
+          
+          <td>
+            <% if return_authorization.respond_to?(:delhivery_waybill) && return_authorization.delhivery_waybill.present? %>
+              <div class="badge badge-success" style="background-color: #28a745;">
+                <%= icon('check') %> <%= return_authorization.delhivery_waybill %>
+              </div>
+            <% else %>
+              
+              <button type="button" 
+                      class="btn btn-sm btn-outline-primary" 
+                      data-toggle="modal" 
+                      data-target="#rvpModal-<%= return_authorization.id %>">
+                <%= icon('truck') %> Schedule Pickup
+              </button>
+
+              <div class="modal fade" id="rvpModal-<%= return_authorization.id %>" tabindex="-1" role="dialog" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered" role="document">
+                  <div class="modal-content">
+                    <div class="modal-header">
+                      <h5 class="modal-title font-weight-bold">
+                        <%= icon('truck', class: "mr-1") %> Schedule Reverse Pickup
+                      </h5>
+                      <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                      </button>
+                    </div>
+                    
+                    <%= form_with url: spree.delhivery_create_pickup_admin_return_authorization_path(return_authorization), method: :post, local: true do |f| %>
+                      <div class="modal-body text-left">
+                        
+                        <div class="alert alert-info text-sm mb-3">
+                          <strong>Return To:</strong> <%= return_authorization.stock_location.name %>
+                        </div>
+
+                        <h6 class="font-weight-bold mb-2 border-bottom pb-1">Parametric QC Details</h6>
+                        
+                        <div class="row">
+                          <div class="col-6">
+                            <div class="form-group">
+                              <label class="small font-weight-bold">Brand Name <span class="text-danger">*</span></label>
+                              <%# Default to Store Name %>
+                              <%= f.text_field :brand, value: current_store.name, class: "form-control", required: true %>
+                            </div>
+                          </div>
+                          <div class="col-6">
+                            <div class="form-group">
+                              <label class="small font-weight-bold">Product Category <span class="text-danger">*</span></label>
+                              <%# Default to 'General' %>
+                              <%= f.text_field :category, value: "General", class: "form-control", required: true %>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div class="form-group">
+                          <label class="small font-weight-bold">QC Question Set</label>
+                          <select class="form-control" disabled title="Currently using Generic QC">
+                            <option>Generic / Visual Check (Default)</option>
+                          </select>
+                          <small class="text-muted">Specific question sets require ID mapping configuration.</small>
+                        </div>
+
+                        <div class="bg-light p-2 rounded border mb-3">
+                          <label class="small font-weight-bold">Items to Pickup:</label>
+                          <% return_authorization.return_items.each do |item| %>
+                            <div class="d-flex align-items-center mb-1 pl-2">
+                              <%= icon('cube', class: "text-muted mr-2") %>
+                              <span class="text-sm font-weight-bold"><%= item.inventory_unit.variant.name %></span>
+                              <span class="badge badge-secondary ml-auto">Qty: 1</span>
+                            </div>
+                          <% end %>
+                        </div>
+
+                        <div class="form-check pt-2 border-top">
+                          <input type="checkbox" class="form-check-input" id="confirmCheck-<%= return_authorization.id %>" required>
+                          <label class="form-check-label text-sm" for="confirmCheck-<%= return_authorization.id %>">
+                            I confirm the details and pickup location are correct.
+                          </label>
+                        </div>
+
+                      </div>
+                      
+                      <div class="modal-footer bg-light">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                        <%= f.button class: "btn btn-primary" do %>
+                          Confirm Pickup
+                        <% end %>
+                      </div>
+                    <% end %>
+                  </div>
+                </div>
+              </div>
+              <% end %>
+          </td>
+          
+          <td class="actions actions-2 text-right">
+            <%= link_to_edit(return_authorization, no_text: true, class: 'edit') if can?(:edit, return_authorization) %>
+            <% if can?(:delete, return_authorization) %>
+              <% if return_authorization.can_cancel? %>
+                <%= link_to_with_icon 'delete', Spree.t(:cancel), spree.cancel_admin_order_return_authorization_path(@order, return_authorization), method: :put, data: { confirm: Spree.t(:are_you_sure) }, class: 'btn btn-danger btn-sm', no_text: true %>
+              <% else %>
+                <%= link_to_delete return_authorization, no_text: true %>
+              <% end %>
+            <% end %>
+          </td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+<% else %>
+  <div class="alert alert-info no-objects-found">
+    <%= Spree.t(:no_resource_found, resource: Spree::ReturnAuthorization.model_name.human) %>,
+    <%= link_to Spree.t(:add_one), new_admin_order_return_authorization_url(@order) %>!
+  </div>
+<% end %>

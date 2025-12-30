@@ -1,0 +1,157 @@
+<%# Admin form for Delhivery EDD block %>
+<br><h5 class="mb-3">Content Settings</h5><br>
+
+<div class="form-group">
+  <%= f.label :preferred_heading_text, "Heading Label" %>
+  <%= f.text_field :preferred_heading_text, class: "form-control", data: { action: "input->auto-submit#submit" } %>
+</div>
+
+<div class="row">
+  <div class="col-6">
+    <div class="form-group">
+      <%= f.label :preferred_placeholder_text, "Placeholder Text" %>
+      <%= f.text_field :preferred_placeholder_text, class: "form-control", data: { action: "input->auto-submit#submit" } %>
+    </div>
+  </div>
+  <div class="col-6">
+    <div class="form-group">
+      <%= f.label :preferred_button_text, "Button Text" %>
+      <%= f.text_field :preferred_button_text, class: "form-control", data: { action: "input->auto-submit#submit" } %>
+    </div>
+  </div>
+</div>
+
+<hr>
+<br><h5 class="mb-3">Logic Settings (Order Timer)</h5><br>
+
+<%# Row 1: Time Settings %>
+<div class="row mb-3">
+  <div class="col-6">
+    <div class="form-group">
+      <%= f.label :preferred_cutoff_hour, "Cutoff Hour (1-12)" %>
+      <%= f.number_field :preferred_cutoff_hour, class: "form-control", min: 1, max: 12, data: { action: "input->auto-submit#submit" } %>
+    </div>
+  </div>
+  <div class="col-6">
+    <div class="form-group">
+      <%= f.label :preferred_cutoff_meridiem, "AM / PM" %>
+      <%= f.select :preferred_cutoff_meridiem, ['AM', 'PM'], {}, class: "form-control select2", data: { action: "change->auto-submit#submit" } %>
+    </div>
+  </div>
+</div>
+
+<%# Row 2: Shipping Mode (Full Width) %>
+<div class="row">
+  <div class="col-12">
+    <div class="form-group">
+      <%= f.label :preferred_default_mode, "Shipping Mode" %>
+      <%= f.select :preferred_default_mode, [['Surface Only', 'Surface'], ['Express Only', 'Express'], ['Both (Allow Switching)', 'Both']], {}, class: "form-control select2", data: { action: "change->auto-submit#submit" } %>
+    </div>
+  </div>
+</div>
+
+<hr>
+
+<br><h5 class="mb-3">Appearance (Colors)</h5><br>
+
+<div class="mb-4 form-group"
+     data-controller="color-picker"
+     data-color-picker-clear-value="false"
+     data-color-picker-default-color-value="<%= f.object.preferred_button_bg_color.presence || '#000000' %>">
+  <div class="d-flex align-items-center">
+    <%= f.hidden_field :preferred_button_bg_color,
+      data: { color_picker_target: "input", action: "change->auto-submit#submit" },
+      autocomplete: "off" %>
+
+    <div>
+      <label class="mb-0">Button Background</label><br>
+      <span data-color-picker-target="value" class="text-muted">
+        <%= f.object.preferred_button_bg_color.presence || '#000000' %>
+      </span>
+    </div>
+
+    <div class="ml-auto" style="width:40px">
+      <div data-color-picker-target="picker"
+           class="border d-inline-block rounded-circle"
+           style="height: 40px; width: 40px; background-color: <%= f.object.preferred_button_bg_color.presence || '#000000' %>;"
+           role="button" aria-label="toggle color picker dialog"></div>
+    </div>
+  </div>
+</div>
+
+<div class="mb-4 form-group"
+     data-controller="color-picker"
+     data-color-picker-clear-value="false"
+     data-color-picker-default-color-value="<%= f.object.preferred_button_text_color.presence || '#FFFFFF' %>">
+  <div class="d-flex align-items-center">
+    <%= f.hidden_field :preferred_button_text_color,
+      data: { color_picker_target: "input", action: "change->auto-submit#submit" },
+      autocomplete: "off" %>
+
+    <div>
+      <label class="mb-0">Button Text Color</label><br>
+      <span data-color-picker-target="value" class="text-muted">
+        <%= f.object.preferred_button_text_color.presence || '#FFFFFF' %>
+      </span>
+    </div>
+
+    <div class="ml-auto" style="width:40px">
+      <div data-color-picker-target="picker"
+           class="border d-inline-block rounded-circle"
+           style="height: 40px; width: 40px; background-color: <%= f.object.preferred_button_text_color.presence || '#FFFFFF' %>;"
+           role="button"></div>
+    </div>
+  </div>
+</div>
+
+<hr>
+
+<div class="mb-4 form-group"
+     data-controller="color-picker"
+     data-color-picker-clear-value="false"
+     data-color-picker-default-color-value="<%= f.object.preferred_success_color.presence || '#10B981' %>">
+  <div class="d-flex align-items-center">
+    <%= f.hidden_field :preferred_success_color,
+      data: { color_picker_target: "input", action: "change->auto-submit#submit" },
+      autocomplete: "off" %>
+
+    <div>
+      <label class="mb-0">Success Message Color</label><br>
+      <span data-color-picker-target="value" class="text-muted">
+        <%= f.object.preferred_success_color.presence || '#10B981' %>
+      </span>
+    </div>
+
+    <div class="ml-auto" style="width:40px">
+      <div data-color-picker-target="picker"
+           class="border d-inline-block rounded-circle"
+           style="height: 40px; width: 40px; background-color: <%= f.object.preferred_success_color.presence || '#10B981' %>;"
+           role="button"></div>
+    </div>
+  </div>
+</div>
+
+<div class="mb-4 form-group"
+     data-controller="color-picker"
+     data-color-picker-clear-value="false"
+     data-color-picker-default-color-value="<%= f.object.preferred_error_color.presence || '#EF4444' %>">
+  <div class="d-flex align-items-center">
+    <%= f.hidden_field :preferred_error_color,
+      data: { color_picker_target: "input", action: "change->auto-submit#submit" },
+      autocomplete: "off" %>
+
+    <div>
+      <label class="mb-0">Error Message Color</label><br>
+      <span data-color-picker-target="value" class="text-muted">
+        <%= f.object.preferred_error_color.presence || '#EF4444' %>
+      </span>
+    </div>
+
+    <div class="ml-auto" style="width:40px">
+      <div data-color-picker-target="picker"
+           class="border d-inline-block rounded-circle"
+           style="height: 40px; width: 40px; background-color: <%= f.object.preferred_error_color.presence || '#EF4444' %>;"
+           role="button"></div>
+    </div>
+  </div>
+</div>

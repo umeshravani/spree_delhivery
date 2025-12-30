@@ -1,0 +1,36 @@
+# Sample localization file for English. Add more files in this directory for other locales.
+# See https://github.com/svenfuchs/rails-i18n/tree/master/rails%2Flocale for starting points.
+en:
+  spree:
+    admin:
+      integrations:
+        delhivery:
+          brand_name: Delhivery
+          description: Integrate with Delhivery to automate your shipping workflows from a single dashboard.
+          capture_at_notification: Capture payment when shipment notification received from ShipStation
+          api_token: "API Token"
+          client_name: "Client Name (Optional)"
+          pickup_location_name: "Pickup Location Name (Warehouse)"
+          shipping_mode: "Shipping Mode (Surface/Express)"
+          production_mode: "Enable Production Mode"
+    # General Spree translations
+    latitude: "Latitude"
+    longitude: "Longitude"
+    geolocation: "Geolocation"        
+  
+  # Custom scope for your buttons
+  delhivery:
+    ship: "Ship with Delhivery"
+    print_label: "Print"
+    void_label: "Cancel"
+    waybill: "Delhivery: %{number}"
+    manifest_confirm: "Are you sure you want to manifest this shipment?"
+    void_confirm: "Void this Waybill? This cannot be undone."
+
+  # Database attribute translations (Must be inside 'en')
+  activerecord:
+    attributes:
+      spree/stock_location:
+        latitude: "Latitude"
+        longitude: "Longitude"
+        delhivery_warehouse_name: "Delhivery Warehouse Name"

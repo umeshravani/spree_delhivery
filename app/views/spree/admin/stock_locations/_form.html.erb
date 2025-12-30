@@ -1,0 +1,184 @@
+<%# 1. General Settings %>
+<div class="card mb-4">
+  <div class="card-header">
+    <h5 class="card-title">
+      <%= Spree.t(:general_settings) %>
+    </h5>
+  </div>
+  <div class="card-body">
+    <%= f.spree_text_field :name, required: true, autofocus: f.object.new_record? %>
+    <%= f.spree_text_field :admin_name, label: Spree.t(:internal_name) %>
+    <% unless f.object.default? %>
+      <%= f.spree_check_box :active %>
+    <% end %>
+  </div>
+</div>
+
+<%# 2. Geolocation (Production Map UI - FIXED) %>
+<div class="card mb-4">
+  <div class="card-header">
+    <h5 class="card-title d-flex align-items-center">
+      <%= icon('map-pin', class: "mr-2") %> 
+      <%= Spree.t(:geolocation, default: 'Warehouse Coordinates') %>
+    </h5>
+  </div>
+  
+  <%# Removed p-0 to allow Spree card padding and fixed bottom radius %>
+  <div class="card-body position-relative">
+    
+    <%# --- Search Bar Overlay --- %>
+    <div class="mb-3 d-flex gap-2 align-items-center">
+      <div class="input-group" style="max-width: 400px;">
+        <input type="text" id="map-search-input" class="form-control" placeholder="Search for a city, area, or street...">
+        <div class="input-group-append">
+          <button type="button" id="map-search-btn" class="btn btn-primary">
+            Search Location
+          </button>
+        </div>
+      </div>
+      <small class="text-muted ml-2 d-none d-sm-inline">
+        <i class="ti ti-hand-finger"></i> Drag the blue marker to pinpoint exact location.
+      </small>
+    </div>
+
+    <%# --- Map Container --- %>
+    <%# Added z-index: 0 to ensure it doesnt overlap Spree dropdowns %>
+    <%# Added mb-3 for spacing from inputs below %>
+    <div id="stock-location-map" style="height: 400px; width: 100%; z-index: 0; background-color: #f0f0f0;" class="mb-3 rounded border"></div>
+
+    <%# --- Read-Only Coordinates Footer --- %>
+    <div class="row">
+      <div class="col-6">
+        <%# Use f.spree_text_field for Spree Default Styling %>
+        <%= f.spree_text_field :latitude, type: 'text', readonly: true, id: 'spree_latitude', label: "Latitude" %>
+      </div>
+      <div class="col-6">
+        <%# Use f.spree_text_field for Spree Default Styling %>
+        <%= f.spree_text_field :longitude, type: 'text', readonly: true, id: 'spree_longitude', label: "Longitude" %>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<%# 3. Address %>
+<div class="card mb-4">
+  <div class="card-header">
+    <h5 class="card-title">
+      <%= Spree.t(:address) %>
+    </h5>
+  </div>
+  <div class="card-body pb-0">
+    <%= render 'spree/addresses/form',
+               address_name: 'address',
+               address_form: f,
+               address_type: 'stock_location',
+               address: f.object %>
+  </div>
+</div>
+
+<%= render "spree/admin/stock_locations/delhivery_fields", f: f %>
+
+<%# --- MAP SCRIPTS (UNCHANGED) --- %>
+<%# Load Leaflet CSS/JS from CDN %>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+<script>
+  (function() {
+    // Variable to store map instance to prevent duplicates
+    var mapInstance = null;
+
+    function initStockLocationMap() {
+      var mapContainer = document.getElementById('stock-location-map');
+      
+      // Safety Checks: Container must exist
+      if (!mapContainer) return;
+
+      // Check if map is already initialized on this container
+      if (mapContainer._leaflet_id) {
+        return; 
+      }
+
+      // 1. Get Inputs
+      var latField = document.getElementById('spree_latitude');
+      var lngField = document.getElementById('spree_longitude');
+      
+      // Default to Center of India if empty
+      var initialLat = parseFloat(latField.value) || 20.5937; 
+      var initialLng = parseFloat(lngField.value) || 78.9629;
+      var initialZoom = (latField.value && lngField.value && latField.value != "0.0") ? 16 : 5;
+
+      // 2. Create Map
+      mapInstance = L.map('stock-location-map').setView([initialLat, initialLng], initialZoom);
+
+      // 3. Add Tiles
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '© OpenStreetMap'
+      }).addTo(mapInstance);
+
+      // 4. Add Marker
+      var marker = L.marker([initialLat, initialLng], {draggable: true}).addTo(mapInstance);
+
+      // Function to update fields
+      function updateInputs(lat, lng) {
+        latField.value = lat.toFixed(6);
+        lngField.value = lng.toFixed(6);
+      }
+
+      // Event: Drag
+      marker.on('dragend', function(e) {
+        var position = marker.getLatLng();
+        updateInputs(position.lat, position.lng);
+        mapInstance.panTo(position);
+      });
+
+      // Event: Click
+      mapInstance.on('click', function(e) {
+        marker.setLatLng(e.latlng);
+        updateInputs(e.latlng.lat, e.latlng.lng);
+      });
+
+      // 5. Search Button Logic
+      var searchBtn = document.getElementById('map-search-btn');
+      if(searchBtn) {
+        searchBtn.addEventListener('click', function(e) {
+          e.preventDefault(); // Prevent form submit
+          var query = document.getElementById('map-search-input').value;
+          if(query.length > 2) {
+            fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + query)
+              .then(response => response.json())
+              .then(data => {
+                if(data && data.length > 0) {
+                  var lat = parseFloat(data[0].lat);
+                  var lon = parseFloat(data[0].lon);
+                  
+                  mapInstance.setView([lat, lon], 16);
+                  marker.setLatLng([lat, lon]);
+                  updateInputs(lat, lon);
+                } else {
+                  alert("Location not found.");
+                }
+              })
+              .catch(err => console.error(err));
+          }
+        });
+      }
+
+      // *** VITAL FIX FOR WHITE MAP ***
+      // Turbo transitions sometimes render the map before the div has height.
+      // This forces a redraw 300ms after load.
+      setTimeout(function() {
+        mapInstance.invalidateSize();
+      }, 300);
+    }
+
+    // Hook into Turbo Load (Spree Standard)
+    document.addEventListener("turbo:load", initStockLocationMap);
+    
+    // Fallback for standard load
+    document.addEventListener("DOMContentLoaded", initStockLocationMap);
+
+  })();
+</script>

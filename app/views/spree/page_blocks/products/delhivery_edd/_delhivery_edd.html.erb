@@ -1,0 +1,239 @@
+<% 
+  block = local_assigns[:block]
+  product = local_assigns[:product]
+  unique_id = "delhivery-edd-#{block.try(:id) || Time.current.to_i}"
+  
+  # Configuration
+  pref_mode = block.preferred_default_mode rescue 'Surface'
+  # If 'Both' is selected, we start with Surface by default
+  initial_mode = (pref_mode == 'Both') ? 'Surface' : pref_mode
+  allow_switch = (pref_mode == 'Both')
+
+  c_hour = block.preferred_cutoff_hour rescue '2'
+  c_meridiem = block.preferred_cutoff_meridiem rescue 'PM'
+  
+  btn_bg = block.preferred_button_bg_color rescue '#000000'
+  btn_txt = block.preferred_button_text_color rescue '#FFFFFF'
+  input_border = block.preferred_input_border_color rescue '#E2E8F0'
+%>
+
+<div class="edd-widget mb-6" style="font-family: inherit; max-width: 100%;">
+  <div class="edd-inner">
+    <label class="block text-sm font-semibold text-gray-900 mb-2">
+      <%= block.preferred_heading_text %>
+    </label>
+
+    <div class="flex items-stretch rounded-md shadow-sm mb-3">
+      <input type="text" 
+             id="<%= unique_id %>-input" 
+             class="block w-full rounded-l-md border-gray-300 focus:outline-none focus:ring-0 focus:border-gray-400 sm:text-sm p-3 border"
+             style="border-color: <%= input_border %>;"
+             placeholder="<%= block.preferred_placeholder_text %>"
+             maxlength="6"
+             pattern="\d*">
+      
+      <button type="button" 
+              id="<%= unique_id %>-btn"
+              class="relative -ml-px inline-flex items-center justify-center space-x-2 rounded-r-md px-8 min-w-[100px] text-sm font-bold border border-l-0 transition opacity-90 hover:opacity-100"
+              style="background-color: <%= btn_bg %>; color: <%= btn_txt %>; border-color: <%= input_border %>;">
+        <span><%= block.preferred_button_text %></span>
+      </button>
+    </div>
+
+    <div id="<%= unique_id %>-result-container" class="hidden mt-3 space-y-2">
+      
+      <div id="<%= unique_id %>-location-row" class="flex items-start text-gray-700">
+        <div class="mr-3 flex-shrink-0 mt-1 text-black">
+          <svg width="16" height="16" viewBox="0 0 13 14" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9.73223 7.75179C9.31301 8.60118 8.74558 9.44806 8.16421 10.208C7.58467 10.9656 7.00315 11.6214 6.56576 12.0884C6.50764 12.1504 6.45214 12.209 6.39961 12.264C6.34708 12.209 6.29158 12.1504 6.23346 12.0884C5.79607 11.6214 5.21455 10.9656 4.63501 10.208C4.05364 9.44806 3.48621 8.60118 3.06699 7.75179C2.64345 6.89364 2.39961 6.0895 2.39961 5.39998C2.39961 3.19084 4.19047 1.39998 6.39961 1.39998C8.60875 1.39998 10.3996 3.19084 10.3996 5.39998C10.3996 6.0895 10.1558 6.89364 9.73223 7.75179ZM6.39961 13.4C6.39961 13.4 11.1996 8.85094 11.1996 5.39998C11.1996 2.74901 9.05058 0.599976 6.39961 0.599976C3.74864 0.599976 1.59961 2.74901 1.59961 5.39998C1.59961 8.85094 6.39961 13.4 6.39961 13.4Z" fill="currentColor"></path><path d="M6.39961 6.99998C5.51595 6.99998 4.79961 6.28363 4.79961 5.39998C4.79961 4.51632 5.51595 3.79998 6.39961 3.79998C7.28327 3.79998 7.99961 4.51632 7.99961 5.39998C7.99961 6.28363 7.28327 6.99998 6.39961 6.99998ZM6.39961 7.79998C7.72509 7.79998 8.79961 6.72546 8.79961 5.39998C8.79961 4.07449 7.72509 2.99998 6.39961 2.99998C5.07413 2.99998 3.99961 4.07449 3.99961 5.39998C3.99961 6.72546 5.07413 7.79998 6.39961 7.79998Z" fill="currentColor"></path></svg>
+        </div>
+        <div class="text-sm">
+          Delivering to <span id="<%= unique_id %>-location" class="font-bold text-black"></span>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between">
+        
+        <div class="flex items-start">
+          <div id="<%= unique_id %>-icon-container" class="mr-3 flex-shrink-0 mt-2 text-black">
+            <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="1.5"><path d="M1 3h15v13H1z"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+          </div>
+          
+          <div class="flex flex-col">
+            <span id="<%= unique_id %>-date" class="text-sm font-bold text-black leading-tight"></span>
+            
+            <span id="<%= unique_id %>-timer-row" class="text-xs text-gray-600 font-medium leading-tight mt-0.5 hidden">
+              Order within <b id="<%= unique_id %>-timer" class="text-green-700"></b>
+            </span>
+          </div>
+        </div>
+
+        <% if allow_switch %>
+          <button type="button" 
+                  id="<%= unique_id %>-switch-btn"
+                  class="flex items-center space-x-1 px-3 py-1.5 rounded bg-gray-100 hover:bg-gray-200 transition text-sm font-medium text-gray-800 border border-gray-300 ml-2"
+                  style="min-height: 32px;">
+            <span id="<%= unique_id %>-switch-icon" class="flex items-center justify-center w-8 h-8 pr-2"></span>
+            <span id="<%= unique_id %>-switch-text">Express</span>
+          </button>
+        <% end %>
+
+      </div>
+    </div>
+
+    <div id="<%= unique_id %>-error" class="mt-2 text-sm font-medium hidden" style="color: <%= block.preferred_error_color %>;"></div>
+  </div>
+</div>
+
+<script>
+  (function() {
+    const initWidget = function() {
+      const btn = document.getElementById('<%= unique_id %>-btn');
+      const input = document.getElementById('<%= unique_id %>-input');
+      const resultContainer = document.getElementById('<%= unique_id %>-result-container');
+      const errorDiv = document.getElementById('<%= unique_id %>-error');
+      
+      const locRow = document.getElementById('<%= unique_id %>-location-row');
+      const locText = document.getElementById('<%= unique_id %>-location');
+      const dateText = document.getElementById('<%= unique_id %>-date');
+      const timerRow = document.getElementById('<%= unique_id %>-timer-row');
+      const timerSpan = document.getElementById('<%= unique_id %>-timer');
+      const iconContainer = document.getElementById('<%= unique_id %>-icon-container');
+      
+      // Switch elements
+      const switchBtn = document.getElementById('<%= unique_id %>-switch-btn');
+      const switchIcon = document.getElementById('<%= unique_id %>-switch-icon');
+      const switchText = document.getElementById('<%= unique_id %>-switch-text');
+
+      const productId = "<%= product.id %>";
+      const cutoffH = "<%= c_hour %>";
+      const cutoffM = "<%= c_meridiem %>";
+      const allowSwitch = <%= allow_switch %>;
+
+      // State
+      let currentMode = "<%= initial_mode %>"; 
+
+      // SVGs
+      const truckSvg = `<svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="1.5"><path d="M1 3h15v13H1z"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>`;
+      
+      const planeSvg = `<svg width="23" height="23" viewBox="0 0 485.794 485.794" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><g><rect x="15.794" y="404.368" width="460" height="20"/><path d="M468.829,89.302c-33.408-19.471-71.368-9.128-97.325,2.976l-77.378,36.082l-133.08-66.934l-79.253,3.405l109.893,111.408 l-70.035,33.269l-72.865-27.731L0,204.525l44.089,54.749c-4.658,5.557-8.879,13.381-5.047,21.599 c5.005,10.732,19.798,16.141,44.063,16.14c4.976,0,10.351-0.227,16.12-0.683c26.636-2.104,55.514-8.903,73.571-17.323 l276.596-128.979c23.89-11.141,35.79-22.839,36.38-35.765C486.078,107.559,483.387,97.784,468.829,89.302z M440.938,131.901 L164.343,260.881c-15.384,7.174-40.641,13.185-64.345,15.313c-24.228,2.175-37.182-0.556-41.5-2.875 c0.889-1.217,2.549-3.129,5.612-5.825l7.184-6.323l-39.708-49.308l17.986-8.388l72.943,27.763l103.169-49.009l-98-99.352 l29.021-1.247l137.089,68.949l86.16-40.176c31.467-14.673,57.979-15.957,78.803-3.823l0.001,0.001 c5.247,3.057,7.081,5.724,7.033,6.77C465.789,113.423,465.188,120.595,440.938,131.901z"/></g></svg>`;
+
+      // Small Icons for the Button
+      const truckSm = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 3h15v13H1z"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>`;
+      const planeSm = `<svg width="20" height="20" viewBox="0 0 485.794 485.794" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><g><rect x="15.794" y="404.368" width="460" height="20"/><path d="M468.829,89.302c-33.408-19.471-71.368-9.128-97.325,2.976l-77.378,36.082l-133.08-66.934l-79.253,3.405l109.893,111.408 l-70.035,33.269l-72.865-27.731L0,204.525l44.089,54.749c-4.658,5.557-8.879,13.381-5.047,21.599 c5.005,10.732,19.798,16.141,44.063,16.14c4.976,0,10.351-0.227,16.12-0.683c26.636-2.104,55.514-8.903,73.571-17.323 l276.596-128.979c23.89-11.141,35.79-22.839,36.38-35.765C486.078,107.559,483.387,97.784,468.829,89.302z M440.938,131.901 L164.343,260.881c-15.384,7.174-40.641,13.185-64.345,15.313c-24.228,2.175-37.182-0.556-41.5-2.875 c0.889-1.217,2.549-3.129,5.612-5.825l7.184-6.323l-39.708-49.308l17.986-8.388l72.943,27.763l103.169-49.009l-98-99.352 l29.021-1.247l137.089,68.949l86.16-40.176c31.467-14.673,57.979-15.957,78.803-3.823l0.001,0.001 c5.247,3.057,7.081,5.724,7.033,6.77C465.789,113.423,465.188,120.595,440.938,131.901z"/></g></svg>`;
+
+      if (!btn || !input) return;
+
+      function updateUI(dataMode) {
+        // 1. Update Main Icon based on what mode we just fetched
+        if (dataMode === 'Express') {
+          iconContainer.innerHTML = planeSvg;
+        } else {
+          iconContainer.innerHTML = truckSvg;
+        }
+
+        // 2. Update Switch Button (if enabled)
+        // If we just fetched Express, button should offer Surface, and vice-versa
+        if (allowSwitch && switchBtn) {
+          if (dataMode === 'Express') {
+            switchText.innerText = "Surface";
+            switchIcon.innerHTML = truckSm;
+          } else {
+            switchText.innerText = "Express";
+            switchIcon.innerHTML = planeSm;
+          }
+        }
+      }
+
+      function checkPincode(modeToFetch) {
+        const pin = input.value.trim();
+        if (pin.length !== 6 || isNaN(pin)) {
+          showError("Please enter a valid 6-digit Pincode.");
+          return;
+        }
+
+        btn.innerText = "...";
+        btn.disabled = true;
+        resultContainer.classList.add('hidden');
+        errorDiv.classList.add('hidden');
+        
+        // If switching, disable switch button temporarily
+        if (switchBtn) switchBtn.disabled = true;
+
+        const url = `/api/v2/storefront/delhivery/check?pincode=${pin}&product_id=${productId}&mode=${modeToFetch}&cutoff_hour=${cutoffH}&cutoff_meridiem=${cutoffM}`;
+
+        fetch(url)
+          .then(res => res.json())
+          .then(data => {
+            if (data.success) {
+              if(data.location_text) {
+                locText.innerText = data.location_text;
+                locRow.classList.remove('hidden');
+              } else {
+                locRow.classList.add('hidden');
+              }
+              
+              dateText.innerText = data.date_text;
+              
+              if (data.timer_text) {
+                timerSpan.innerText = data.timer_text;
+                timerRow.classList.remove('hidden');
+              } else {
+                timerRow.classList.add('hidden');
+              }
+              
+              // Update Icons and Button state
+              updateUI(modeToFetch);
+              
+              resultContainer.classList.remove('hidden');
+            } else {
+              showError(data.error || "Delivery not available.");
+            }
+          })
+          .catch(err => {
+            console.error(err);
+            showError("Unable to check delivery.");
+          })
+          .finally(() => {
+            btn.innerText = "<%= block.preferred_button_text %>";
+            btn.disabled = false;
+            if (switchBtn) switchBtn.disabled = false;
+          });
+      }
+
+      function showError(msg) {
+        errorDiv.innerText = msg;
+        errorDiv.classList.remove('hidden');
+      }
+
+      // Check Button Click
+      btn.addEventListener('click', function(e) {
+        e.preventDefault(); 
+        // Always reset to initial preference when typing a new pin
+        currentMode = "<%= initial_mode %>"; 
+        checkPincode(currentMode);
+      });
+
+      // Enter Key Logic
+      input.addEventListener('keypress', (e) => { 
+        if(e.key === 'Enter') {
+          e.preventDefault(); 
+          e.stopPropagation(); 
+          currentMode = "<%= initial_mode %>";
+          checkPincode(currentMode); 
+        }
+      });
+
+      // Switch Button Click
+      if (switchBtn) {
+        switchBtn.addEventListener('click', function(e) {
+          e.preventDefault();
+          // Toggle mode
+          currentMode = (currentMode === 'Surface') ? 'Express' : 'Surface';
+          checkPincode(currentMode);
+        });
+      }
+    };
+
+    initWidget();
+  })();
+</script>

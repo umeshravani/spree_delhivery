@@ -1,0 +1,40 @@
+<turbo-frame id="dialog">
+  <div class="dialog-content">
+    <div class="dialog-header">
+      <h5 class="dialog-title"><%= Spree.t(:edit_shipment) %> #<%= @shipment.number %></h5>
+      <button type="button" class="btn-close" data-action="dialog#close" aria-label="<%= Spree.t(:close) %>"></button>
+    </div>
+
+    <div class="dialog-body">
+      <%# We combine Tracking and Method into one form for the modal %>
+      <%= form_for [:admin, @order, @shipment], html: { id: 'edit-shipment-form' } do |f| %>
+        
+        <%# Tracking Number Field %>
+        <div class="form-group mb-4">
+          <%= f.label :tracking, Spree.t(:tracking) %>
+          <%= f.text_field :tracking, class: 'form-control', autofocus: true %>
+        </div>
+
+        <%# Shipping Method Dropdown %>
+        <div class="form-group mb-4">
+          <%= f.label :selected_shipping_rate_id, Spree.t(:shipping_method) %>
+          <%= f.select :selected_shipping_rate_id, 
+              @shipment.shipping_rates.sort_by(&:cost).map { |sr| ["#{sr.name} #{sr.display_price}", sr.id] }, 
+              {}, 
+              class: 'form-control custom-select' %>
+        </div>
+
+        <%# Hidden Field to ensure we stay on the same page context if needed %>
+        <%= hidden_field_tag :redirect_to_order, 'true' %>
+
+        <div class="dialog-footer d-flex justify-content-between align-items-center mt-4">
+          <button type="button" class="btn btn-secondary" data-action="dialog#close">
+            <%= Spree.t(:cancel) %>
+          </button>
+          
+          <%= f.button Spree.t(:update), class: 'btn btn-primary', data: { disable_with: Spree.t(:saving) } %>
+        </div>
+      <% end %>
+    </div>
+  </div>
+</turbo-frame>

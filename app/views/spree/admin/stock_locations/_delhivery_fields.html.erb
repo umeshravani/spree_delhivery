@@ -1,0 +1,19 @@
+<div class="card mb-3">
+  <div class="card-header">
+    <h5 class="card-title mb-0">Delhivery Settings</h5>
+  </div>
+  <div class="card-body">
+    
+    <div class="form-group">
+      <%= label_tag :delhivery_warehouse_name, "Delhivery Warehouse Name (Exact Match)" %>
+      <%= text_field_tag "stock_location[delhivery_warehouse_name]", 
+          @stock_location.delhivery_warehouse_name, 
+          class: 'form-control', 
+          placeholder: "e.g. Artolika.Inc" %>
+      <small class="form-text text-muted">
+        <strong>Critical:</strong> This must match the name registered in your Delhivery Client Panel exactly.
+      </small>
+    </div>
+
+    </div>
+</div>

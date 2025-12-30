@@ -1,0 +1,42 @@
+<div class="card mb-4">
+  <div class="card-header">
+    <h5 class="mb-0">Delhivery Settings</h5>
+  </div>
+  <div class="card-body">
+    <%# API Token %>
+    <%= preference_field(@integration, form, 'api_token', i18n_scope: 'spree.admin.integrations.delhivery') %>
+
+    <%# Client Name (Optional) %>
+    <%= preference_field(@integration, form, 'client_name', i18n_scope: 'spree.admin.integrations.delhivery') %>
+
+    <%# Pickup Location - CRITICAL %>
+    <%= preference_field(@integration, form, 'pickup_location_name', i18n_scope: 'spree.admin.integrations.delhivery') %>
+    <small class="form-text text-muted mb-2">
+      Must match the exact Warehouse Name in your Delhivery Dashboard.
+    </small>
+
+    <div class="row mb-4">
+      <div class="col-6">
+        <div class="form-group">
+          <label>Store Weight Unit</label>
+          <%= form.select :preferred_store_weight_unit, 
+              options_for_select([['Kilograms (kg)', 'kg'], ['Pounds (lbs)', 'lbs'], ['Grams (g)', 'g'], ['Ounces (oz)', 'oz']], @integration.preferred_store_weight_unit), 
+              {}, class: 'form-control' %>
+          <small class="form-text text-muted mt-2">Select the unit your products use in Spree.</small>
+        </div>
+      </div>
+      <div class="col-6">
+        <div class="form-group">
+          <label>Store Dimension Unit</label>
+          <%= form.select :preferred_store_dimension_unit, 
+              options_for_select([['Centimeters (cm)', 'cm'], ['Inches (in)', 'in'], ['Meters (m)', 'm'], ['Millimeters (mm)', 'mm']], @integration.preferred_store_dimension_unit), 
+              {}, class: 'form-control' %>
+          <small class="form-text text-muted mt-2">Select the unit your products use in Spree.</small>
+        </div>
+      </div>
+    </div>
+
+    <%# Production Mode Checkbox %>
+    <%= preference_field(@integration, form, 'production_mode', i18n_scope: 'spree.admin.integrations.delhivery') %>
+  </div>
+</div>

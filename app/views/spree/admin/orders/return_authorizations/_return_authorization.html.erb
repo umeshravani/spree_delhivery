@@ -1,0 +1,157 @@
+<% edit_link =
+  if can?(:edit, return_authorization)
+    spree.edit_admin_order_return_authorization_path(
+      @order,
+      return_authorization,
+    )
+  else
+    spree.admin_order_return_authorization_path(@order, return_authorization)
+  end %>
+
+<tr
+  id="<%= spree_dom_id(return_authorization) %>"
+  data-controller="row-link"
+  class="cursor-pointer"
+>
+  <td data-action="click->row-link#openLink" class="font-bolder">
+    <%= link_to return_authorization.number, edit_link %>
+  </td>
+  <td data-action="click->row-link#openLink">
+    <small class="badge badge-<%= return_authorization.state %>">
+      <%= Spree.t("return_authorization_states.#{return_authorization.state}") %>
+    </small>
+  </td>
+  <td data-action="click->row-link#openLink"><%= return_authorization.display_pre_tax_total.to_html %></td>
+  <td data-action="click->row-link#openLink"><%= spree_time(return_authorization.created_at) %></td>
+  
+  <%# --- DELHIVERY RETURN ACTION --- %>
+  <td class="text-right">
+    <div class="flex items-center justify-end gap-2">
+      
+      <%# Only show if Delhivery integration exists %>
+      <% if defined?(Spree::Integrations::Delhivery) && Spree::Integrations::Delhivery.active.exists? %>
+        
+        <%# 1. SUCCESS STATE: Waybill Exists %>
+        <% if return_authorization.respond_to?(:delhivery_waybill) && return_authorization.delhivery_waybill.present? %>
+          <div class="badge badge-success text-white" title="Waybill: <%= return_authorization.delhivery_waybill %>" style="background-color: #28a745;">
+            <%= icon('check', class: "w-3 h-3 mr-1") %> 
+            Pickup Scheduled
+          </div>
+        
+        <% else %>
+          
+          <%# 2. TRIGGER BUTTON (Opens Modal) %>
+          <%# Note: onclick with stopPropagation prevents the row-click event %>
+          <button type="button" 
+                  class="btn btn-sm btn-outline-primary shadow-sm stop-propagation"
+                  onclick="event.stopPropagation(); $('#rvpModal-<%= return_authorization.id %>').modal('show');"
+                  title="Schedule Reverse Pickup via Delhivery">
+            <%= icon('truck', class: "w-4 h-4 mr-1") %> Pickup
+          </button>
+
+          <%# 3. PICKUP FORM MODAL %>
+          <div class="modal fade text-left" id="rvpModal-<%= return_authorization.id %>" tabindex="-1" role="dialog" aria-hidden="true" onclick="event.stopPropagation();">
+            <div class="modal-dialog modal-dialog-centered" role="document">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h5 class="modal-title font-weight-bold">
+                    <%= icon('truck', class: "mr-1") %> Schedule Reverse Pickup
+                  </h5>
+                  <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                  </button>
+                </div>
+                
+                <%# FORM START %>
+                <%= form_with url: spree.delhivery_create_pickup_admin_return_authorization_path(return_authorization), method: :post, local: true do |f| %>
+                  <div class="modal-body">
+                    
+                    <div class="alert alert-info text-sm mb-3 w-100">
+                      <strong>Return To:</strong> <%= return_authorization.stock_location.name %>
+                      <br>
+                      <span class="text-muted text-xs">
+                        (Ensure "Delhivery Warehouse Name"
+                        <br>is configured for this location)
+                      </span>
+                    </div>
+
+                    <h6 class="font-weight-bold mb-2 border-bottom pb-1">Parametric QC Details</h6>
+                    
+                    <div class="row">
+                      <div class="col-6">
+                        <div class="form-group">
+                          <label class="small font-weight-bold">Brand Name <span class="text-danger">*</span></label>
+                          <%# Pre-fill with Store Name %>
+                          <%= f.text_field :brand, value: current_store.name, class: "form-control", required: true %>
+                        </div>
+                      </div>
+                      <div class="col-6">
+                        <div class="form-group">
+                          <label class="small font-weight-bold">Category <span class="text-danger">*</span></label>
+                          <%# Default to General %>
+                          <%= f.text_field :category, value: "General", class: "form-control", required: true %>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="form-group">
+                      <label class="small font-weight-bold">QC Question Set</label>
+                      <select class="form-control" disabled title="Using Generic Visual Check">
+                        <option>Generic / Visual Check (Default)</option>
+                      </select>
+                      <small class="text-muted">Specific question sets require ID mapping configuration.</small>
+                    </div>
+
+                    <div class="bg-light p-2 rounded border mb-3">
+                      <label class="small font-weight-bold">Items to Pickup:</label>
+                      <% return_authorization.return_items.each do |item| %>
+                        <div class="d-flex align-items-center mb-1 pl-2">
+                          <%= icon('cube', class: "text-muted mr-2") %>
+                          <span class="text-sm font-weight-bold">
+                            <%= item.inventory_unit.variant.name %>
+                          </span>
+                          <span class="badge badge-info ml-auto">Qty: 1</span>
+                        </div>
+                      <% end %>
+                    </div>
+
+                    <div class="form-group pt-2 border-top">
+                      <div class="form-check">
+                        <input type="checkbox" class="form-check-input" id="confirmCheck-<%= return_authorization.id %>" required>
+                        <label class="form-check-label text-sm font-weight-bold" for="confirmCheck-<%= return_authorization.id %>">
+                          I confirm the details are correct.
+                        </label>
+                      </div>
+                    </div>
+
+                  </div>
+                  
+                  <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                    <%= f.button class: "btn btn-primary ml-2" do %>
+                      Confirm Pickup
+                    <% end %>
+                  </div>
+                <% end %>
+                <%# FORM END %>
+              </div>
+            </div>
+          </div>
+          <%# --- END MODAL --- %>
+
+        <% end %>
+
+      <% end %>
+
+      <%# Existing Edit Button %>
+      <%= link_to_edit(
+        return_authorization,
+        no_text: true,
+        data: {
+          row_link_target: :link,
+        },
+        url: edit_link,
+      ) %>
+    </div>
+  </td>
+</tr>
