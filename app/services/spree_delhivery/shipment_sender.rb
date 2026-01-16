@@ -37,7 +37,6 @@ module SpreeDelhivery
 
         # 3. Fire Spree Shipment State Machine
         # This moves state from 'ready' -> 'shipped'
-        # It triggers inventory updates and sends the Shipment Email to customer
         if @shipment.can_ship?
           @shipment.ship! 
         end
@@ -54,11 +53,27 @@ module SpreeDelhivery
 
         return success(@shipment)
       else
-        # Extract error message safely from various possible error keys
-        error_msg = response['rmk'] || 
-                    response.dig('packages', 0, 'remarks')&.join(', ') || 
-                    "Unknown Delhivery Error"
-        return error(error_msg)
+        # --- IMPROVED ERROR HANDLING ---
+        # 1. Extract the deep error message first (it's more accurate than 'rmk')
+        raw_error = response.dig('packages', 0, 'remarks')&.join(', ') || response['rmk'] || "Unknown Error"
+        
+        # 2. Map known API errors to friendly user messages
+        friendly_error = case raw_error.to_s.downcase
+                         when /insufficient balance/
+                           # 🚀 Feature: Fetch live balance to show the user
+                           current_bal = @client.fetch_balance rescue nil
+                           msg = "Authorization Failed: Insufficient Delhivery Wallet Balance."
+                           msg += " Current Balance: ₹#{current_bal}." if current_bal
+                           msg + " Please recharge."
+                         when /duplicate/
+                           "Duplicate Order: This order ID has already been processed."
+                         when /pincode/
+                           "Serviceability Error: Pincode (#{@address.zipcode}) not serviceable."
+                         else
+                           "Delhivery Error: #{raw_error}"
+                         end
+
+        return error(friendly_error)
       end
     rescue StandardError => e
       Rails.logger.error(e.backtrace.join("\n"))
@@ -79,6 +94,19 @@ module SpreeDelhivery
       # 2. Calculate and Convert Dimensions to CM
       dims = calculate_dimensions # Returns [L, W, H] in CM
 
+      # 3. Detect Shipping Mode dynamically from Customer Choice
+      # Checks if the shipping method name contains "Express" or "Surface"
+      shipping_method_name = @shipment.shipping_method&.name.to_s.downcase
+      
+      final_shipping_mode = if shipping_method_name.include?('express')
+                              'Express'
+                            elsif shipping_method_name.include?('surface')
+                              'Surface'
+                            else
+                              # Fallback to Admin Setting if name is generic (e.g. "Free Shipping")
+                              @integration.preferred_shipping_mode || 'Surface'
+                            end
+
       {
         pickup_location: {
           name: @integration.preferred_pickup_location_name
@@ -97,20 +125,24 @@ module SpreeDelhivery
             products_desc: @shipment.line_items.map { |i| i.variant.name }.join(', ').truncate(50),
             cod_amount: payment_mode == 'COD' ? @order.total.to_f : 0.0,
             total_amount: @order.total.to_f,
-            shipping_mode: @integration.preferred_shipping_mode || 'Surface',
+            
+            # Use the detected mode ('Express' or 'Surface')
+            shipping_mode: final_shipping_mode,
+            
             quantity: @shipment.line_items.sum(&:quantity).to_i,
             
             # Dynamic Values
             weight: total_weight_grams,
             shipment_length: dims[0],
             shipment_width: dims[1],
-            shipment_height: dims[2]
+            shipment_height: dims[2],
+            
+            # Client Name (Dynamic based on settings)
+            client: @integration.preferred_client_name
           }
         ]
       }
     end
-
-    # --- HELPER METHODS FOR CONVERSION ---
 
     def calculate_total_weight
       # Sum weight of all items in shipment
