@@ -27,7 +27,7 @@ module SpreeDelhivery
       end
     end
 
-    # --- 1. Fetch Shipping Rate ---
+    # Fetch Shipping Rate
     def fetch_shipping_rate(source_pin:, dest_pin:, weight_gms:, mode: 'S')
       path = "/api/kinko/v1/invoice/charges/.json"
       api_mode = map_mode(mode)
@@ -56,7 +56,7 @@ module SpreeDelhivery
       nil
     end
 
-    # --- 2. Calculate TAT ---
+    # Calculate TAT
     def calculate_tat(source_pin:, dest_pin:, mode: 'S')
       path = "/api/dc/expected_tat"
       api_mode = map_mode(mode)
@@ -76,7 +76,7 @@ module SpreeDelhivery
       nil
     end
     
-    # --- 3. Fetch Pincode Details ---
+    # Fetch Pincode Details
     def fetch_pincode_details(pincode)
       path = "/c/api/pin-codes/json/"
       response = self.class.get(path, query: { filter_codes: pincode }, headers: auth_headers)
@@ -99,8 +99,8 @@ module SpreeDelhivery
       nil
     end
 
-# --- 4. Create Return Shipment (SAFE & ROBUST) ---
-def create_return_request(return_auth, options = {})
+    # Create Return Shipment
+    def create_return_request(return_auth, options = {})
       order = return_auth.order
       stock_location = return_auth.stock_location
       customer_address = order.ship_address
@@ -148,71 +148,71 @@ def create_return_request(return_auth, options = {})
         }
       end
 
-  # Calculate Weight
-  total_weight_gms = 0.0
-  return_auth.inventory_units.each do |unit|
-    w = unit.variant.weight.to_f
-    w = (w < 50) ? w * 1000.0 : w
-    total_weight_gms += w
-  end
-  total_weight_gms = 500 if total_weight_gms < 500
+      # Calculate Weight
+      total_weight_gms = 0.0
+      return_auth.inventory_units.each do |unit|
+        w = unit.variant.weight.to_f
+        w = (w < 50) ? w * 1000.0 : w
+        total_weight_gms += w
+      end
+      total_weight_gms = 500 if total_weight_gms < 500
 
-  # Payload
-  payload = {
-    "shipments" => [
-      {
-        "client" => @integration.preferred_client_name,
-        "order" => return_auth.number,
-        "waybill" => "",
-        "name" => customer_address.full_name,
-        "add" => clean_str.call(customer_address.address1),
-        "city" => customer_address.city,
-        "state" => customer_address.state&.name || customer_address.state_name,
-        "country" => "India",
-        "phone" => c_phone,
-        "pin" => customer_address.zipcode,
-        
-        "return_name" => stock_location.name,
-        "return_add" => clean_str.call(stock_location.address1),
-        "return_city" => stock_location.city,
-        "return_state" => stock_location.state&.name || stock_location.state_name,
-        "return_country" => "India",
-        "return_pin" => stock_location.zipcode,
-        "return_phone" => w_phone,
-        
-        "payment_mode" => "Pickup",
-        "products_desc" => "Return #{order.number}",
-        "quantity" => return_auth.return_items.count,
-        "weight" => total_weight_gms.to_i,
-        "total_amount" => 0,
-        "shipping_mode" => "Surface",
-        "order_date" => Time.current.strftime("%d-%m-%Y"),
-        
-        "qc_type" => "param",
-        "custom_qc" => custom_qc_items
+      # Payload
+      payload = {
+        "shipments" => [
+          {
+            "client" => @integration.preferred_client_name,
+            "order" => return_auth.number,
+            "waybill" => "",
+            "name" => customer_address.full_name,
+            "add" => clean_str.call(customer_address.address1),
+            "city" => customer_address.city,
+            "state" => customer_address.state&.name || customer_address.state_name,
+            "country" => "India",
+            "phone" => c_phone,
+            "pin" => customer_address.zipcode,
+            
+            "return_name" => stock_location.name,
+            "return_add" => clean_str.call(stock_location.address1),
+            "return_city" => stock_location.city,
+            "return_state" => stock_location.state&.name || stock_location.state_name,
+            "return_country" => "India",
+            "return_pin" => stock_location.zipcode,
+            "return_phone" => w_phone,
+            
+            "payment_mode" => "Pickup",
+            "products_desc" => "Return #{order.number}",
+            "quantity" => return_auth.return_items.count,
+            "weight" => total_weight_gms.to_i,
+            "total_amount" => 0,
+            "shipping_mode" => "Surface",
+            "order_date" => Time.current.strftime("%d-%m-%Y"),
+            
+            "qc_type" => "param",
+            "custom_qc" => custom_qc_items
+          }
+        ],
+        "pickup_location" => {
+          "name" => stock_location.delhivery_warehouse_name
+        }
       }
-    ],
-    "pickup_location" => {
-      "name" => stock_location.delhivery_warehouse_name
-    }
-  }
 
-  Rails.logger.info "[Delhivery] RVP Payload: #{payload.to_json}"
+      Rails.logger.info "[Delhivery] RVP Payload: #{payload.to_json}"
 
-  response = self.class.post(
-    "/api/cmu/create.json",
-    body: { "format" => "json", "data" => payload.to_json },
-    headers: { "Authorization" => "Token #{@api_token}" }
-  )
-  
-  JSON.parse(response.body) rescue { "error" => "Invalid JSON Response" }
+      response = self.class.post(
+        "/api/cmu/create.json",
+        body: { "format" => "json", "data" => payload.to_json },
+        headers: { "Authorization" => "Token #{@api_token}" }
+      )
+      
+      JSON.parse(response.body) rescue { "error" => "Invalid JSON Response" }
 
-rescue StandardError => e
-  Rails.logger.error "Delhivery Return Exception: #{e.message}"
-  { "error" => e.message }
-end
+    rescue StandardError => e
+      Rails.logger.error "Delhivery Return Exception: #{e.message}"
+      { "error" => e.message }
+    end
 
-    # --- 5. Forward Shipment ---
+    # 5. Forward Shipment
     def create_shipment(payload_data)
       response = self.class.post("/api/cmu/create.json", 
         body: { "format" => "json", "data" => payload_data.to_json }, 
@@ -221,7 +221,21 @@ end
       JSON.parse(response.body) rescue {}
     end
 
-    # --- Helpers ---
+    # 6. Fetch Wallet Balance
+    def fetch_balance
+      # This is the standard endpoint for checking Delhivery wallet balance
+      response = self.class.get("/api/client/get_balance_ledger.json", headers: auth_headers)
+      
+      if response.success? && response.parsed_response.is_a?(Hash)
+        # Returns format like: { "cash_balance" => "150.00", ... }
+        return response.parsed_response['cash_balance'] 
+      end
+      nil
+    rescue => e
+      Rails.logger.error "[Delhivery] Balance Fetch Failed: #{e.message}"
+      nil
+    end
+
     def track_shipment(waybill)
       send_get_request("/api/v1/packages/json/?waybill=#{waybill}")
     end
