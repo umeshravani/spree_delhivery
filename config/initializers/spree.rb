@@ -28,5 +28,7 @@ Rails.application.config.after_initialize do
   # Spree.page_builder.page_blocks << Spree::PageBlocks::BigRedButtonToCallSales
 
   # Storefront partials
+  config = Rails.application.config.spree.payment_methods
+  config << Spree::PaymentMethod::DelhiveryCod
   Spree.storefront.partials.head << 'spree_delhivery/head'
 end
