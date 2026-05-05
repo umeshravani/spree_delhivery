@@ -1,7 +1,7 @@
 Spree::Core::Engine.add_routes do
   namespace :admin do
     
-    # ... existing shipments/stock_locations routes ...
+    # Shipments/stock_locations routes ...
     resources :shipments do
       member do
         post :delhivery_manifest, to: 'delhivery#create_manifest'
@@ -17,8 +17,7 @@ Spree::Core::Engine.add_routes do
       end
     end
 
-    # FIX: Correctly nested Returns Route
-    # We target the Spree::ReturnAuthorization model
+    # Returns Route using Spree::ReturnAuthorization model
     resources :return_authorizations, only: [] do
       member do
         post :delhivery_create_pickup, to: 'delhivery_returns#create_pickup'
@@ -28,8 +27,8 @@ Spree::Core::Engine.add_routes do
   end
 
   namespace :api, defaults: { format: 'json' } do
-    namespace :v2 do
-      namespace :storefront do
+    namespace :v3 do
+      namespace :store do
         get 'delhivery/check', to: 'delhivery#check'
       end
     end
