@@ -1,18 +1,15 @@
-if defined?(Spree::PageBlock)
-  module Spree
-    module PageBlocks
-      module Products
-        class DelhiveryEdd < Spree::PageBlock
+module Spree
+  module PageBlocks
+    module Products
+      class DelhiveryEdd < (defined?(Spree::PageBlock) ? Spree::PageBlock : Object)
+        if defined?(Spree::PageBlock)
           preference :heading_text, :string, default: 'Estimated Delivery Date'
           preference :placeholder_text, :string, default: 'Enter PIN Code'
           preference :button_text, :string, default: 'Check'
-
           preference :default_mode, :string, default: 'Surface'
-
           preference :cutoff_time, :string, default: '14:00'
           preference :cutoff_hour, :string, default: '2' 
           preference :cutoff_meridiem, :string, default: 'PM'
-
           preference :input_border_color, :string, default: '#E2E8F0'
           preference :button_bg_color, :string, default: '#000000'
           preference :button_text_color, :string, default: '#FFFFFF'
