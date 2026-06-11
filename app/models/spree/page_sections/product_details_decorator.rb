@@ -1,4 +1,5 @@
-module Spree
+if defined?(Spree::PageSections::ProductDetails)
+  module Spree
     module PageSections
       module ProductDetailsDecorator
         def default_blocks
@@ -7,7 +8,7 @@ module Spree
             Spree::PageBlocks::Products::DelhiveryEdd.new # Added this
           ]
         end
-  
+
         def available_blocks_to_add
           super + [
             Spree::PageBlocks::Products::RazorpayAffordability,
@@ -17,5 +18,6 @@ module Spree
       end
     end
   end
-  
+
   Spree::PageSections::ProductDetails.prepend(Spree::PageSections::ProductDetailsDecorator)
+end
