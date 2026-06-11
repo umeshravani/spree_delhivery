@@ -5,7 +5,6 @@ module Spree
       before_action :load_shipment, except: [:create_pickup]
 
       def create_pickup
-        # Spree 5.4 StockLocations use 'stl_...' prefixes, so we must use the prefix finder if available
         stock_id = params[:id]
         @stock_location = if stock_id.to_s.start_with?('stl_') && Spree::StockLocation.respond_to?(:find_by_prefix_id)
                             Spree::StockLocation.find_by_prefix_id(stock_id)
@@ -13,7 +12,6 @@ module Spree
                             Spree::StockLocation.find(stock_id)
                           end
         
-        # Schedule for Tomorrow, 1 Package (Static for now)
         service = SpreeDelhivery::PickupService.new(@stock_location, count: 5)
         result = service.call
 
@@ -23,7 +21,8 @@ module Spree
           flash[:error] = "Pickup Failed: #{result.message}"
         end
         
-        redirect_back(fallback_location: spree.edit_admin_stock_location_path(@stock_location))
+        # Turbo Fix for seamless UI updates
+        redirect_to spree.edit_admin_stock_location_path(@stock_location), status: :see_other
       end
   
       def create_manifest
@@ -31,13 +30,13 @@ module Spree
         result = sender.call
 
         if result.success?
-          # Waybill is usually stored on the shipment or a custom field
           flash[:success] = "Shipment Manifested! Waybill: #{@shipment.delhivery_waybill}"
         else
           flash[:error] = "Delhivery Error: #{result.error}"
         end
 
-        redirect_to spree.edit_admin_order_path(@shipment.order)
+        # Turbo Fix
+        redirect_to spree.edit_admin_order_path(@shipment.order), status: :see_other
       end
 
       def delhivery_cancel
@@ -49,12 +48,12 @@ module Spree
           flash[:error] = "Delhivery Error: #{result.error}"
         end
 
-        redirect_back(fallback_location: spree.edit_admin_order_path(@shipment.order))
+        # Turbo Fix
+        redirect_to spree.edit_admin_order_path(@shipment.order), status: :see_other
       end
 
       def download_label
         if @shipment.delhivery_label_url.present?
-          # allow_other_host is required for Rails 7+ to redirect to external Delhivery URLs
           redirect_to @shipment.delhivery_label_url, allow_other_host: true
         else
           client = SpreeDelhivery::Client.new
@@ -66,21 +65,74 @@ module Spree
              redirect_to url, allow_other_host: true
           else
              flash[:error] = "Label not generated yet. Please try again later."
-             redirect_to spree.edit_admin_order_path(@shipment.order)
+             redirect_to spree.edit_admin_order_path(@shipment.order), status: :see_other
           end
         end
       end
       
       def sync_tracking
         result = SpreeDelhivery::ShipmentTracker.new(@shipment).call
+        current_status = result.status.to_s.upcase
 
+        raw_data_string = result.data.inspect.upcase if result.data
+        
+        # --- 1. THE CANCELLATION CATCHER ---
+        is_cancelled = current_status.include?("CANCEL") || 
+                       current_status.include?("VOID") || 
+                       (raw_data_string && (raw_data_string.include?("CANCEL") || raw_data_string.include?("VOID")))
+
+        if is_cancelled
+          ActiveRecord::Base.transaction do
+            @shipment.update_columns(
+              delhivery_waybill: nil, tracking: nil, tracking_status: "CANCELLED",
+              state: "ready", shipped_at: nil
+            )
+            @shipment.inventory_units.update_all(state: "on_hand")
+            @shipment.order.updater.update
+          end
+
+          flash[:success] = "Remote cancellation detected. Waybill cleared and shipment reset to Ready."
+          redirect_to spree.edit_admin_order_path(@shipment.order), status: :see_other
+          return
+        end
+
+        # --- 2. THE COD AUTO-CAPTURE ENGINE ---
+        is_delivered = current_status.include?("DELIVERED") || 
+                       (raw_data_string && raw_data_string.include?("DELIVERED"))
+
+        if is_delivered
+          ActiveRecord::Base.transaction do
+            # Find any pending COD payments on this order and capture them
+            @shipment.order.payments.valid.where(state: ['pending', 'checkout']).each do |payment|
+              if payment.payment_method&.type == 'Spree::PaymentMethod::DelhiveryCod'
+                payment.capture!
+                Rails.logger.info "[Delhivery] Auto-captured COD Payment #{payment.number} for Order #{@shipment.order.number}"
+              end
+            end
+            
+            # Ensure the shipment state is formally marked as delivered
+            @shipment.deliver! if @shipment.can_deliver?
+            @shipment.update_column(:tracking_status, current_status)
+            
+            # Force order recalculation to clear the "Balance Due" badge
+            @shipment.order.updater.update
+          end
+
+          flash[:success] = "Shipment Delivered! COD Payment automatically captured and reconciled."
+          redirect_to spree.edit_admin_order_path(@shipment.order), status: :see_other
+          return
+        end
+
+        # --- 3. STANDARD TRACKING UPDATE ---
         if result.success?
-          flash[:success] = "Status Updated: #{result.status}"
+          @shipment.update_column(:tracking_status, current_status)
+          flash[:success] = "Status Updated: #{current_status}"
         else
-          flash[:error] = "Tracking Error: #{result.error || result.status}"
+          flash[:error] = "Tracking Error: #{result.error || current_status}"
         end
         
-        redirect_back(fallback_location: spree.edit_admin_order_path(@shipment.order))
+        # Turbo Fix
+        redirect_to spree.edit_admin_order_path(@shipment.order), status: :see_other
       end
 
       private
@@ -91,8 +143,6 @@ module Spree
       
         @shipment = nil
       
-        # 1. Safely decode Spree 5.4 Prefixed IDs (ful_...)
-        # CRITICAL FIX: The method is find_by_prefix_id (singular prefix)
         if shipment_param.to_s.start_with?('ful_')
           if Spree::Shipment.respond_to?(:find_by_prefix_id)
             @shipment = Spree::Shipment.find_by_prefix_id(shipment_param)
@@ -101,24 +151,21 @@ module Spree
           end
         end
       
-        # 2. Fallback: Shipment Number (H...)
         @shipment ||= Spree::Shipment.find_by(number: shipment_param)
       
-        # 3. Fallback: Standard Integer ID (Only if it's pure numbers)
         if @shipment.nil? && shipment_param.to_s.match?(/\A\d+\z/)
           @shipment = Spree::Shipment.find_by(id: shipment_param)
         end
       
-        # 4. Final check
         if @shipment.nil?
           Rails.logger.error "--- [DELHIVERY ERROR] No Shipment found for: #{shipment_param} ---"
           flash[:error] = "Shipment not found for ID: #{shipment_param}"
-          redirect_to spree.admin_orders_path
+          redirect_to spree.admin_orders_path, status: :see_other
         end
       rescue => e
         Rails.logger.error "--- [DELHIVERY FATAL] #{e.class}: #{e.message} ---"
         flash[:error] = "An unexpected error occurred: #{e.message}"
-        redirect_to spree.admin_orders_path
+        redirect_to spree.admin_orders_path, status: :see_other
       end
     end
   end

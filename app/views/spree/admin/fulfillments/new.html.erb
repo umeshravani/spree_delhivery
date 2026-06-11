@@ -1,0 +1,63 @@
+<turbo-frame id="dialog">
+  <div>
+    <div class="dialog-header">
+      <h5 class="dialog-title">Ship Package</h5>
+      <button name="button" type="button" class="btn-close" data-action="dialog#close" data-dismiss="dialog" aria-label="Close"></button>
+    </div>
+
+    <%= form_with url: spree.admin_order_shipment_fulfillment_path(@order.number, @shipment.number), method: :post, data: { turbo_frame: "_top" } do |f| %>
+      <div class="dialog-body">
+        
+        <div class="bg-blue-50 border border-blue-200 text-blue-800 p-3 rounded-md flex items-start text-sm mb-4">
+          <%= icon('info-circle', class: "w-5 h-5 mr-2 mt-0.5 flex-shrink-0 text-blue-600") %>
+          <span>You are preparing to ship <strong><%= @shipment.number %></strong>.</span>
+        </div>
+
+        <%# 1. LIVE PRICING SERVICE LEVEL DROPDOWN %>
+        <div class="form-group border-b pb-4 mb-4">
+          <label for="shipping_method_id" class="font-medium text-gray-900 mb-2 block">Shipping Service Level</label>
+          <select name="shipping_method_id" id="shipping_method_id" class="form-select w-full">
+            <% @available_methods.each do |method| %>
+              <option value="<%= method[:id] %>" <%= 'selected' if @shipment.selected_shipping_rate&.shipping_method_id == method[:id] %>>
+                <%= method[:name] %> (<%= method[:display_cost] %>)
+              </option>
+            <% end %>
+          </select>
+          <span class="form-text mt-1 text-xs text-gray-600">Changing this updates the customer's financial total to match the actual carrier rate.</span>
+        </div>
+
+        <label class="font-medium text-gray-900 mb-3 block">Fulfillment Action</label>
+
+        <%# 2. DELHI-VERY PRIMARY ACTION %>
+        <% if defined?(Spree::Integrations::Delhivery) && Spree::Integrations::Delhivery.active.exists? %>
+          <div class="flex items-center gap-2 mb-3">
+             <input type="radio" name="fulfillment_type" value="delhivery" id="fulfillment_type_delhivery" checked class="form-radio text-primary focus:ring-primary" onchange="document.getElementById('manual_tracking_field').classList.add('hidden')">
+             <label for="fulfillment_type_delhivery" class="text-sm font-medium">Use Delhivery API (Auto-generates Waybill)</label>
+          </div>
+        <% end %>
+
+        <%# 3. MANUAL OVERRIDE ACTION %>
+        <div class="flex items-center gap-2 mb-3">
+          <input type="radio" name="fulfillment_type" value="manual" id="fulfillment_type_manual" class="form-radio text-primary focus:ring-primary" <%= 'checked' unless defined?(Spree::Integrations::Delhivery) %> onchange="document.getElementById('manual_tracking_field').classList.remove('hidden')">
+          <label for="fulfillment_type_manual" class="text-sm font-medium">Manual Tracking (Shipped outside API)</label>
+        </div>
+
+        <%# 4. CONDITIONAL TRACKING INPUT %>
+        <div id="manual_tracking_field" class="pl-6 pt-2 <%= 'hidden' if defined?(Spree::Integrations::Delhivery) %>">
+          <div class="form-group mb-0">
+            <label for="tracking_number">Tracking Number <span class="required font-weight-bold text-danger">*</span></label>
+            <%= f.text_field :tracking_number, class: "form-input w-full", placeholder: "e.g. BD77382910" %>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="dialog-footer">
+        <button name="button" type="button" class="btn btn-light" data-action="dialog#close" data-dismiss="dialog">Discard</button>
+        <button name="button" type="submit" class="btn btn-primary text-center flex items-center justify-center" data-turbo-submits-with="<span class='inline-block w-4 h-4 border-2 border-current border-r-transparent rounded-full animate-spin' role='status'></span>" style="width: 100px; height: 35px;">
+          Confirm
+        </button>
+      </div>
+    <% end %>
+  </div>
+</turbo-frame>

@@ -11,9 +11,18 @@
 
     <%# Pickup Location - CRITICAL %>
     <%= preference_field(@integration, form, 'pickup_location_name', i18n_scope: 'spree.admin.integrations.delhivery') %>
-    <small class="form-text text-muted mb-2">
+    <small class="form-text text-muted mb-4">
       Must match the exact Warehouse Name in your Delhivery Dashboard.
     </small>
+
+    <%# --- NEW: COD SURCHARGE --- %>
+    <div class="form-group mb-4 bg-light p-3 border rounded">
+      <label class="font-weight-bold">COD Surcharge Fee (₹)</label>
+      <%= form.number_field :preferred_cod_surcharge_amount, class: 'form-control', step: '0.01' %>
+      <small class="form-text text-muted mt-2">
+        <strong>Optional:</strong> Enter a fixed amount to charge customers for using Cash on Delivery (e.g. 150). Set to 0 to disable.
+      </small>
+    </div>
 
     <div class="row mb-4">
       <div class="col-6">

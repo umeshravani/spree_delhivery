@@ -1,120 +1,74 @@
 <% order ||= shipment.order %>
-<%# ADDED 'block' and 'w-full' to ensure the turbo-frame respects the margin %>
-<%= turbo_frame_tag dom_id(shipment), class: "block w-full card mb-6 shadow-sm" do %>
+<%= turbo_frame_tag dom_id(shipment), class: "card mb-6 block w-full shadow-sm" do %>
   
-  <%# --- HEADER --- %>
+  <%# --- HEADER & TOOLBAR --- %>
   <div class="card-header flex flex-col sm:flex-row sm:items-center justify-between px-4 py-4 gap-4 h-auto">
     
-    <%# --- LEFT GROUP --- %>
     <div class="flex items-center gap-2 w-full sm:w-auto">
-      <span class="flex items-center">
-        <%= shipment_state(shipment.state) %>
-      </span>
+      <span class="flex items-center"><%= shipment_state(shipment.state) %></span>
       <strong class="shipment-number text-lg text-gray-900"><%= shipment.number %></strong>
-      
       <% if shipment.shipped_at.present? %>
         <small class="text-gray-600 whitespace-nowrap ml-auto sm:ml-1">
-          on <%= shipment.shipped_at.strftime('%b %d, %Y at %I:%M %p') %>
+          <%= spree_time_ago(shipment.shipped_at) %>
         </small>
       <% end %>
     </div>
 
-    <%# --- RIGHT GROUP --- %>
     <div class="flex items-center gap-3 w-full sm:w-auto sm:ml-auto justify-end pt-2">
-      
-      <%# --- UNIFIED TOOLBAR BOX --- %>
       <div class="flex items-center gap-2">
         
-        <%# 1. DELHIVERY BUTTONS %>
-        <% if defined?(Spree::Integrations::Delhivery) && Spree::Integrations::Delhivery.active.exists? %>
+        <%# 1. DELHIVERY ACTIONS %>
+        <% if defined?(Spree::Integrations::Delhivery) && shipment.try(:delhivery_waybill).present? %>
           
-          <% if shipment.delhivery_waybill.blank? %>
-            <%# Create Waybill %>
-            <%= button_to spree.delhivery_manifest_admin_shipment_path(shipment), 
-                method: :post, 
-                class: 'btn btn-xs text-white shadow-sm px-3 py-1 flex items-center rounded hover:opacity-90', 
-                style: 'height: 28px; background-color: #061932;', 
-                params: { format: :html }, 
-                data: { turbo: false, confirm: "Generate Delhivery Waybill?" } do %>
-                <%= icon('truck-delivery', class: "w-3 h-3 mr-1.5") %> Ship with Delhivery
-            <% end %>
-
-          <% elsif shipment.delhivery_waybill.present? %>
-            
-            <%# Print Label %>
-            <%= link_to spree.delhivery_label_admin_shipment_path(shipment, format: :pdf), 
-                class: 'btn btn-light btn-sm p-0 flex items-center justify-center border hover:bg-white', 
-                style: 'width: 28px; height: 28px;',
-                target: '_blank',
-                title: "Print Shipping Label" do %>
-                <%= icon('printer', class: "w-4 h-4 pr-0 mr-0") %>
-            <% end %>
-
-            <%# Schedule Pickup (Triggers Native Dialog) %>
-            <button type="button" 
-                    class="btn btn-light btn-sm p-0 flex items-center justify-center border hover:bg-white" 
-                    style="width: 28px; height: 28px;"
-                    onclick="document.getElementById('pickupModal-<%= shipment.id %>').showModal()"
-                    title="Schedule Pickup">
-              <%= icon('truck', class: "w-4 h-4 pr-0 mr-0") %>
-            </button>
-            
-            <%# Sync Status %>
-            <%= button_to spree.delhivery_track_admin_shipment_path(shipment), 
-                method: :post, 
-                class: 'btn btn-light btn-sm p-0 flex items-center justify-center border hover:bg-white', 
-                style: 'width: 28px; height: 28px;',
-                title: "Refresh Status",
-                data: { turbo: false } do %>
-                <%= icon('refresh', class: "w-4 h-4 pr-0 mr-0") %> 
-            <% end %>
-
-            <%# Void Label %>
-            <%= button_to spree.delhivery_cancel_admin_shipment_path(shipment), 
-                method: :post, 
-                class: 'btn btn-light btn-sm p-0 flex items-center justify-center border hover:bg-white', 
-                style: 'width: 28px; height: 28px;',
-                data: { turbo: false, confirm: "Void this Delhivery Waybill?" },
-                title: "Cancel Shipment" do %>
-                <%= icon('cancel', class: "w-4 h-4 pr-0 mr-0 text-red-500") %> 
-            <% end %>
-
+          <%= link_to spree.delhivery_label_admin_shipment_path(shipment, format: :pdf), class: 'btn btn-light btn-sm p-0 flex items-center justify-center border hover:bg-white', style: 'width: 28px; height: 28px;', target: '_blank', title: "Print Shipping Label" do %>
+              <i class="ti ti-printer icon" style=""></i>
           <% end %>
-        <% end %>
+          <button type="button" class="btn btn-light btn-sm p-0 flex items-center justify-center border hover:bg-white" style="width: 28px; height: 28px;" onclick="document.getElementById('pickupModal-<%= shipment.id %>').showModal()" title="Schedule Pickup">
+            <i class="ti ti-truck icon" style=""></i>
+          </button>
+          <%= button_to spree.delhivery_track_admin_shipment_path(shipment), method: :post, class: 'btn btn-light btn-sm p-0 flex items-center justify-center border hover:bg-white', style: 'width: 28px; height: 28px;', title: "Refresh Status", data: { turbo: false } do %>
+              <i class="ti ti-refresh icon" style=""></i>
+          <% end %>
+          <%= button_to spree.delhivery_cancel_admin_shipment_path(shipment), method: :post, class: 'btn btn-light btn-sm p-0 flex items-center justify-center border hover:bg-white', style: 'width: 28px; height: 28px;', data: { turbo: false, confirm: "Void this Delhivery Waybill? This allows you to generate a new one." }, title: "Cancel Shipment" do %>
+              <i class="ti ti-x icon text-red-500" style=""></i>
+          <% end %>
 
-        <%# 2. EDIT BUTTON %>
-        <% if can?(:update, shipment) && !order.canceled? && !shipment.canceled? %>
-          <%= link_to_with_icon 'edit', 
-              Spree.t(:edit), 
-              spree.edit_admin_order_shipment_path(order, shipment), 
-              class: 'btn btn-light btn-sm p-0 flex items-center justify-center border hover:bg-white', 
-              style: 'width: 28px; height: 28px;', 
-              title: Spree.t(:edit),
-              no_text: true,
-              data: { turbo_frame: 'dialog', action: 'dialog#open' } %> 
+        <%# 2. OUR FULFILLMENT MODAL (Native Spree 5 Styling) %>
+        <% elsif !shipment.canceled? %>
+          
+          <%= link_to spree.new_admin_order_shipment_fulfillment_path(order.number, shipment.number), 
+              class: 'btn btn-secondary btn-sm', 
+              data: { turbo_frame: 'dialog', action: 'dialog#open click->reveal:stop' } do %>
+              <i class="ti ti-send icon icon-send" style=""></i> 
+              <span><%= shipment.shipped? ? 'Update Carrier' : Spree.t(:ship) %></span>
+          <% end %>
+          
         <% end %>
-
       </div>
 
-      <%# 3. LOCATION %>
+      <%# LOCATION INFO %>
       <div class="flex items-center gap-1 text-sm pl-3 border-l border-gray-200 ml-auto hidden sm:flex">
-        <small class="text-gray-600">from</small>
+        <small class="text-gray-600"><%= Spree.t(:package_from).downcase %></small>
         <strong class="text-gray-900 truncate" style="max-width: 150px;">
-          <%= shipment.stock_location.name %>
+          <% if can?(:edit, shipment.stock_location) %>
+            <%= link_to shipment.stock_location.name, spree.edit_admin_stock_location_path(shipment.stock_location), data: { turbo_frame: '_top' } %>
+          <% else %>
+            <%= shipment.stock_location.name %>
+          <% end %>
         </strong>
       </div>
-
     </div>
   </div>
 
-  <%# --- BODY --- %>
+  <%# --- BODY (Line Items) --- %>
   <div class="card-body mb-0 p-0">
     <div class="shipment-line-items overflow-x-auto">
-      <div class="text-gray-600 text-center border-b py-2 px-4 text-sm shipment-line-items__row grid grid-cols-5 gap-4 bg-gray-50 min-w-[500px]">
-        <span class="text-left col-span-2"><%= Spree.t(:item_description) %></span>
+      <div class="text-gray-600 text-center border-b py-2 px-4 text-sm shipment-line-items__row bg-gray-50 min-w-[500px]">
+        <span class="text-left"><%= Spree.t(:item_description) %></span>
         <span><%= Spree.t(:price) %></span>
         <span><%= Spree.t(:quantity) %></span>
         <span><%= Spree.t(:total) %></span>
+        <span></span>
       </div>
       <div class="min-w-[500px]">
         <%= render collection: shipment.manifest, partial: 'spree/admin/orders/shipment_manifest_item', as: :item, locals: { shipment: shipment } %>
@@ -123,7 +77,6 @@
 
     <%= turbo_frame_tag dom_id(shipment, :shipping_method), class: "py-2 px-4 flex justify-between items-center min-h-14 border-t" do %>
       <div class="flex items-center gap-2">
-        <span class="text-sm text-gray-500">Shipping Method:</span>
         <% if rate = shipment.selected_shipping_rate %>
           <strong><%= rate.name %></strong>
           <span class="text-gray-600">(<%= shipment.display_cost %>)</span>
@@ -135,9 +88,8 @@
 
     <%# --- TRACKING --- %>
     <% unless shipment.digital? %>
-      <%= turbo_frame_tag dom_id(shipment, :tracking), class: "py-2 px-4 flex justify-between items-center min-h-8 pb-4 border-t bg-gray-50/50" do %>
-        
-        <div class="flex items-center gap-2 mr-2">
+      <%= turbo_frame_tag dom_id(shipment, :tracking), class: "border-t px-4 flex justify-between items-center min-h-14 bg-gray-50/50" do %>
+        <div class="py-4 flex items-center gap-2 mr-2">
           <strong class="text-sm text-gray-900"><%= Spree.t(:tracking) %>:</strong>
           <% if shipment.tracked? %>
             <% if shipment.tracking_url.present? %>
@@ -148,8 +100,20 @@
           <% else %>
             <span class="text-gray-400 italic text-sm"><%= Spree.t(:no_tracking_present) %></span>
           <% end %>
-        </div>
 
+          <%# UNIFIED EDIT BUTTON (Native Spree 5 Styling) %>
+          <% if can?(:update, shipment) && !order.canceled? && !shipment.canceled? && shipment.try(:delhivery_waybill).blank? %>
+              <%= link_to spree.new_admin_order_shipment_fulfillment_path(order.number, shipment.number), 
+                  class: 'btn btn-light btn-sm ml-2 p-0 flex items-center justify-center border hover:bg-white', 
+                  style: 'width: 28px; height: 28px;',
+                  title: "Update Carrier & Tracking",
+                  data: { turbo_frame: 'dialog', action: 'dialog#open' } do %>
+                  <i class="ti ti-pencil icon mr-0" style=""></i>
+              <% end %>
+          <% end %>
+        </div>
+        
+        <%# Delhivery Status Badge %>
         <% if shipment.try(:tracking_status).present? %>
           <% 
             status_down = shipment.tracking_status.to_s.downcase
@@ -161,64 +125,56 @@
                           end
           %>
           <small class="px-2.5 py-0.5 rounded-full text-xs font-medium <%= badge_class %> flex items-center gap-1">
-            <%= icon('truck', class: "w-3 h-3") %>
+            <i class="ti ti-truck icon" style="width: 14px; height: 14px;"></i>
             <%= shipment.tracking_status.upcase %>
           </small>
         <% end %>
-
       <% end %>
     <% end %>
   </div>
+<% end %>
 
-  <%# --- 100% NATIVE SPREE 5 HTML5 MODAL --- %>
-  <% if defined?(Spree::Integrations::Delhivery) && shipment.delhivery_waybill.present? %>
-    <dialog id="pickupModal-<%= shipment.id %>" class="dialog">
-      <div>
-        
-        <div class="dialog-header">
-          <h5 class="dialog-title">Schedule Pickup</h5>
-          <button type="button" class="btn-close" onclick="document.getElementById('pickupModal-<%= shipment.id %>').close()" aria-label="Close"></button>
+<%# --- HTML5 PICKUP MODAL --- %>
+<% if defined?(Spree::Integrations::Delhivery) && shipment.try(:delhivery_waybill).present? %>
+  <dialog id="pickupModal-<%= shipment.id %>" class="dialog">
+    <div>
+      <div class="dialog-header">
+        <h5 class="dialog-title">Schedule Pickup</h5>
+        <button type="button" class="btn-close" onclick="document.getElementById('pickupModal-<%= shipment.id %>').close()" aria-label="Close"></button>
+      </div>
+
+      <%= form_with url: spree.delhivery_pickup_admin_stock_location_path(shipment.stock_location), method: :post, data: { turbo: false } do |f| %>
+        <div class="dialog-body">
+          <div class="alert alert-info text-sm mb-4 bg-blue-50 text-blue-800 p-3 rounded-md flex items-center">
+            <i class="ti ti-info-circle icon mr-2 w-5 h-5" style=""></i>
+            <span>Requesting pickup for: <strong><%= shipment.stock_location.name %></strong></span>
+          </div>
+
+          <div class="flex gap-4">
+            <div class="form-group w-1/2">
+              <label for="pickup_date">Pickup Date</label>
+              <%= f.date_field :pickup_date, value: Date.today, min: Date.today, class: "form-input", id: "pickup_date" %>
+            </div>
+            <div class="form-group w-1/2">
+              <label for="pickup_time">Pickup Time</label>
+              <%= f.time_field :pickup_time, value: "16:00", class: "form-input", id: "pickup_time" %>
+            </div>
+          </div>
+
+          <div class="form-group mt-4">
+            <label for="count">Total Packages to Pickup <span class="required font-weight-bold text-danger"> *</span></label>
+            <%= f.number_field :count, value: 1, min: 1, class: "form-input", id: "count" %>
+            <span class="form-text mt-2">Total packages ready at this location today.</span>
+          </div>
         </div>
 
-        <%= form_with url: spree.delhivery_pickup_admin_stock_location_path(shipment.stock_location), method: :post, data: { turbo: false } do |f| %>
-          
-          <div class="dialog-body">
-            
-            <div class="alert alert-info text-sm mb-4 bg-blue-50 text-blue-800 p-3 rounded-md flex items-center">
-              <%= icon('info-circle', class: "w-5 h-5 mr-2") %>
-              <span>Requesting pickup for: <strong><%= shipment.stock_location.name %></strong></span>
-            </div>
-
-            <div class="flex gap-4">
-              <div class="form-group w-1/2">
-                <label for="pickup_date">Pickup Date</label>
-                <%= f.date_field :pickup_date, value: Date.today, min: Date.today, class: "form-input", id: "pickup_date" %>
-              </div>
-              <div class="form-group w-1/2">
-                <label for="pickup_time">Pickup Time</label>
-                <%= f.time_field :pickup_time, value: "16:00", class: "form-input", id: "pickup_time" %>
-              </div>
-            </div>
-
-            <div class="form-group mt-4">
-              <label for="count">Total Packages to Pickup <span class="required font-weight-bold text-danger"> *</span></label>
-              <%= f.number_field :count, value: 1, min: 1, class: "form-input", id: "count" %>
-              <span class="form-text mt-2">Total packages ready at this location today.</span>
-            </div>
-
-          </div>
-
-          <div class="dialog-footer">
-            <button type="button" class="btn btn-light" onclick="document.getElementById('pickupModal-<%= shipment.id %>').close()">Discard</button>
-            
-            <button type="submit" class="btn btn-primary text-center flex items-center justify-center" data-turbo-submits-with="<span class='inline-block w-4 h-4 border-2 border-current border-r-transparent rounded-full animate-spin' role='status'></span>">
-              <%= icon('truck', class: "w-4 h-4 mr-2") %> Schedule
-            </button>
-          </div>
-
-        <% end %>
-      </div>
-    </dialog>
-  <% end %>
-
+        <div class="dialog-footer">
+          <button type="button" class="btn btn-light" onclick="document.getElementById('pickupModal-<%= shipment.id %>').close()">Discard</button>
+          <button type="submit" class="btn btn-primary text-center flex items-center justify-center" data-turbo-submits-with="<span class='inline-block w-4 h-4 border-2 border-current border-r-transparent rounded-full animate-spin' role='status'></span>">
+            <i class="ti ti-truck icon mr-2" style=""></i> Schedule
+          </button>
+        </div>
+      <% end %>
+    </div>
+  </dialog>
 <% end %>

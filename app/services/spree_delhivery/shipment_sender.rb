@@ -60,7 +60,7 @@ module SpreeDelhivery
         # 2. Map known API errors to friendly user messages
         friendly_error = case raw_error.to_s.downcase
                          when /insufficient balance/
-                           # 🚀 Feature: Fetch live balance to show the user
+                           # Fetch live balance to show the user
                            current_bal = @client.fetch_balance rescue nil
                            msg = "Authorization Failed: Insufficient Delhivery Wallet Balance."
                            msg += " Current Balance: ₹#{current_bal}." if current_bal
@@ -83,7 +83,13 @@ module SpreeDelhivery
     private
 
     def build_payload
-      payment_mode = @order.paid? ? 'Prepaid' : 'COD'
+      # --- ROBUST PAYMENT MODE DETECTION ---
+      # Instead of relying on order.paid?, look at valid payments assigned to the order
+      is_cod_payment = @order.payments.valid.any? do |payment|
+        payment.payment_method&.type == 'Spree::PaymentMethod::DelhiveryCod'
+      end
+
+      payment_mode = is_cod_payment ? 'COD' : 'Prepaid'
       
       # Sanitization: Ensure phone is exactly 10 digits (removes +91 or 0 prefix)
       phone = @address.phone.to_s.gsub(/[^0-9]/, '').last(10)
@@ -95,7 +101,6 @@ module SpreeDelhivery
       dims = calculate_dimensions # Returns [L, W, H] in CM
 
       # 3. Detect Shipping Mode dynamically from Customer Choice
-      # Checks if the shipping method name contains "Express" or "Surface"
       shipping_method_name = @shipment.shipping_method&.name.to_s.downcase
       
       final_shipping_mode = if shipping_method_name.include?('express')
@@ -123,12 +128,13 @@ module SpreeDelhivery
             order: @shipment.number,
             payment_mode: payment_mode,
             products_desc: @shipment.line_items.map { |i| i.variant.name }.join(', ').truncate(50),
+            
+            # --- DYNAMIC COD COLLECTION VALUES ---
             cod_amount: payment_mode == 'COD' ? @order.total.to_f : 0.0,
             total_amount: @order.total.to_f,
             
             # Use the detected mode ('Express' or 'Surface')
             shipping_mode: final_shipping_mode,
-            
             quantity: @shipment.line_items.sum(&:quantity).to_i,
             
             # Dynamic Values
@@ -145,10 +151,7 @@ module SpreeDelhivery
     end
 
     def calculate_total_weight
-      # Sum weight of all items in shipment
       raw_weight = @shipment.line_items.sum { |li| (li.variant.weight || 0) * li.quantity }
-      
-      # Default to 0.5 (store unit) if weight is missing/zero to avoid API errors
       raw_weight = 0.5 if raw_weight.zero?
 
       unit = @integration.preferred_store_weight_unit || 'kg'
@@ -158,16 +161,13 @@ module SpreeDelhivery
               when 'lbs' then raw_weight * 453.592
               when 'oz' then raw_weight * 28.3495
               when 'g' then raw_weight
-              else raw_weight * 1000 # Default assumption
+              else raw_weight * 1000
               end
       
       grams.to_i
     end
 
     def calculate_dimensions
-      # Logic: Take the largest item's Length & Width, and sum the Heights (Stacking)
-      # This provides a reasonable estimation for the box size.
-      
       max_l = 0
       max_w = 0
       total_h = 0
@@ -176,20 +176,15 @@ module SpreeDelhivery
         v = line_item.variant
         q = line_item.quantity
         
-        # Get raw dimensions (default to 10 if missing)
-        l = (v.depth || 10).to_f # Spree often maps depth to length
+        l = (v.depth || 10).to_f
         w = (v.width || 10).to_f
         h = (v.height || 10).to_f
 
-        # Update max base dimensions
         max_l = [max_l, l].max
         max_w = [max_w, w].max
-        
-        # Stack height
         total_h += (h * q)
       end
 
-      # Convert to CM
       unit = @integration.preferred_store_dimension_unit || 'cm'
       
       [max_l, max_w, total_h].map do |val|

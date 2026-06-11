@@ -1,6 +1,12 @@
 Spree::Core::Engine.add_routes do
   namespace :admin do
-    
+
+    resources :orders do
+      resources :shipments do
+        resource :fulfillment, only: [:new, :create]
+      end
+    end
+
     # Shipments/stock_locations routes ...
     resources :shipments do
       member do

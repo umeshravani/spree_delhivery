@@ -7,6 +7,7 @@ module Spree
         preference :pickup_location_name, :string # Must match Delhivery Dashboard Warehouse Name EXACTLY
         preference :production_mode, :boolean, default: false
         preference :shipping_mode, :string, default: 'Surface' # Options: Surface, Express
+        preference :cod_surcharge_amount, :decimal, default: 0.0
 
         # --- NEW UNIT PREFERENCES ---
         preference :store_weight_unit, :string, default: 'kg' # Options: kg, lbs, oz, g
