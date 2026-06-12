@@ -1,5 +1,21 @@
 module Spree
   class PaymentMethod::DelhiveryCod < PaymentMethod
+    def method_type
+      'delhivery_cod'
+    end
+
+    def payment_icon_name
+      'delhivery_cod'
+    end
+
+    def description_partial_name
+      'delhivery_cod'
+    end
+
+    def configuration_guide_partial_name
+      'delhivery_cod'
+    end
+    
     def source_required?
       false
     end
