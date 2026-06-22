@@ -8,13 +8,17 @@
     <%= form_with url: spree.admin_order_shipment_fulfillment_path(@order.number, @shipment.number), method: :post, data: { turbo_frame: "_top" } do |f| %>
       <div class="dialog-body">
         
-        <div class="bg-blue-50 border border-blue-200 text-blue-800 p-3 rounded-md flex items-start text-sm mb-4">
-          <%= icon('info-circle', class: "w-5 h-5 mr-2 mt-0.5 flex-shrink-0 text-blue-600") %>
-          <span>You are preparing to ship <strong><%= @shipment.number %></strong>.</span>
+        <div class="alert badge-info mb-4">
+          <div>
+            <h5 class="font-bold mb-1" style="font-size: 0.95rem;">
+              <i class="ti ti-info-circle mr-1"></i> Shipment Notice
+            </h5>
+            You are preparing to generate a manifest and ship package <strong><%= @shipment.number %></strong>.
+          </div>
         </div>
 
-        <%# 1. LIVE PRICING SERVICE LEVEL DROPDOWN %>
-        <div class="form-group border-b pb-4 mb-4">
+        <%# LIVE PRICING SERVICE LEVEL DROPDOWN %>
+        <div class="form-group mb-4">
           <label for="shipping_method_id" class="font-medium text-gray-900 mb-2 block">Shipping Service Level</label>
           <select name="shipping_method_id" id="shipping_method_id" class="form-select w-full">
             <% @available_methods.each do |method| %>
@@ -23,12 +27,63 @@
               </option>
             <% end %>
           </select>
-          <span class="form-text mt-1 text-xs text-gray-600">Changing this updates the customer's financial total to match the actual carrier rate.</span>
+          <span class="form-text mt-2 text-xs text-gray-600">Changing this updates the customer's total to match the actual carrier rate.</span>
         </div>
+
+        <%# LOGISTICS & DIMENSIONAL AUDIT BOX %>
+        <% if @integration.present? %>
+          <div class="mb-4 border border-gray-200 rounded-md bg-gray-50/70 p-4">
+            <div class="flex items-center gap-1.5 mb-3 border-b border-gray-200 pb-2">
+              <i class="ti ti-scale icon text-gray-700" style="font-size: 1.1rem;"></i>
+              <h6 class="text-sm font-semibold text-gray-900 m-0">Logistics & Dim Weight Verification</h6>
+            </div>
+
+            <div class="grid grid-cols-1 gap-y-2 text-sm mb-4">
+              
+              <div class="flex items-center justify-between">
+                <span class="text-muted">Catalog Store Weight:</span>
+                <span class="badge badge-balance_due border text-dark font-mono" style="font-size: 0.85rem;">
+                  <%= @shipment.line_items.sum { |li| (li.variant.weight || 0) * li.quantity }.round(2) %> <%= @weight_unit %>
+                </span>
+              </div>
+              
+              <div class="flex items-center justify-between">
+                <span class="text-muted">Delhivery Payload Weight:</span>
+                <span class="badge badge-balance_due border text-dark font-mono" style="font-size: 0.85rem;">
+                  <%= @weight_in_grams %> g
+                </span>
+              </div>
+              
+              <div class="flex items-center justify-between pt-1">
+                <span class="text-muted">Calculated Dimensions (L×W×H):</span>
+                <div class="flex items-center gap-2">
+                  <% if @dims_cm.any? { |d| d == 10.0 } %>
+                    <span class="badge badge-warning text-dark flex items-center" title="One or more items are using fallback defaults. Please review catalog metrics.">
+                      <i class="ti ti-alert-triangle mr-1"></i> Fallback Used
+                    </span>
+                  <% end %>
+                  <span class="badge badge-balance_due border text-dark font-mono" style="font-size: 0.85rem;">
+                    <%= @dims_cm[0] %> × <%= @dims_cm[1] %> × <%= @dims_cm[2] %> CM
+                  </span>
+                </div>
+              </div>
+
+            </div>
+
+            <%# Dynamic Packaging Selection Rule %>
+            <div class="form-group mb-0 pt-3 border-t border-gray-200">
+              <label for="delhivery_packaging_type" class="font-medium text-gray-900 text-xs mb-1.5 block">Assigned Physical Packaging Profile</label>
+              <select name="delhivery_packaging_type" id="delhivery_packaging_type" class="form-select form-select-sm w-full font-sans">
+                <option value="Carton" <%= 'selected' if @recommended_packaging == 'Carton Box' %>>Carton Box (Large Profile / Fragile Frame Shipments)</option>
+                <option value="Flyer" <%= 'selected' if @recommended_packaging == 'Flyer' %>>Standard Document Flyer (Soft Materials &lt; 2kg)</option>
+              </select>
+            </div>
+          </div>
+        <% end %>
 
         <label class="font-medium text-gray-900 mb-3 block">Fulfillment Action</label>
 
-        <%# 2. DELHI-VERY PRIMARY ACTION %>
+        <%# 2. DELHIVERY PRIMARY ACTION %>
         <% if defined?(Spree::Integrations::Delhivery) && Spree::Integrations::Delhivery.active.exists? %>
           <div class="flex items-center gap-2 mb-3">
              <input type="radio" name="fulfillment_type" value="delhivery" id="fulfillment_type_delhivery" checked class="form-radio text-primary focus:ring-primary" onchange="document.getElementById('manual_tracking_field').classList.add('hidden')">
