@@ -17,5 +17,5 @@ Gem::Specification.new do |spec|
 
   spec.add_dependency "spree_core", ">= 5.2.0"
   spec.add_dependency "spree_extension"
-  s.add_dependency 'faraday', '>= 2.0'
+  spec.add_dependency "faraday", ">= 2.0"
 end
