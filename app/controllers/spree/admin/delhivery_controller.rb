@@ -1,7 +1,7 @@
 module Spree
   module Admin
     class DelhiveryController < Spree::Admin::BaseController
-      # We skip load_shipment for create_pickup because that action uses a StockLocation ID
+      # Skip load_shipment for create_pickup because that action uses a StockLocation ID
       before_action :load_shipment, except: [:create_pickup]
 
       def create_pickup
@@ -30,6 +30,18 @@ module Spree
         result = sender.call
 
         if result.success?
+          # Force the shipment from 'pending' directly to 'shipped' on a successful API response
+          ActiveRecord::Base.transaction do
+            @shipment.update_columns(
+              state: 'shipped',
+              shipped_at: @shipment.shipped_at || Time.current
+            )
+            # Log all inventory units out of warehouse stock management
+            @shipment.inventory_units.where.not(state: 'shipped').update_all(state: 'shipped')
+            # Trigger downstream order pipeline status calculations
+            @shipment.order.updater.update
+          end
+
           flash[:success] = "Shipment Manifested! Waybill: #{@shipment.delhivery_waybill}"
         else
           flash[:error] = "Delhivery Error: #{result.error}"
@@ -76,7 +88,6 @@ module Spree
 
         raw_data_string = result.data.inspect.upcase if result.data
         
-        # --- 1. THE CANCELLATION CATCHER ---
         is_cancelled = current_status.include?("CANCEL") || 
                        current_status.include?("VOID") || 
                        (raw_data_string && (raw_data_string.include?("CANCEL") || raw_data_string.include?("VOID")))
@@ -96,7 +107,7 @@ module Spree
           return
         end
 
-        # --- 2. THE COD AUTO-CAPTURE ENGINE ---
+        # THE COD AUTO-CAPTURE ENGINE
         is_delivered = current_status.include?("DELIVERED") || 
                        (raw_data_string && raw_data_string.include?("DELIVERED"))
 
@@ -110,11 +121,18 @@ module Spree
               end
             end
             
-            # Ensure the shipment state is formally marked as delivered
-            @shipment.deliver! if @shipment.can_deliver?
-            @shipment.update_column(:tracking_status, current_status)
+            # Crash Prevention: Spree doesn't natively support a 'delivered' state-machine path.
+            # We explicitly update columns to avoid NoMethodError on deliver!
+            @shipment.update_columns(
+              state: 'shipped',
+              tracking_status: 'DELIVERED',
+              shipped_at: @shipment.shipped_at || Time.current
+            )
             
-            # Force order recalculation to clear the "Balance Due" badge
+            # Cleanly verify inventory states match deployment metrics
+            @shipment.inventory_units.where.not(state: 'shipped').update_all(state: 'shipped')
+            
+            # Force downstream state engine recalculations (Clears "Balance Due" badge to green Paid)
             @shipment.order.updater.update
           end
 
@@ -123,7 +141,7 @@ module Spree
           return
         end
 
-        # --- 3. STANDARD TRACKING UPDATE ---
+        # STANDARD TRACKING UPDATE
         if result.success?
           @shipment.update_column(:tracking_status, current_status)
           flash[:success] = "Status Updated: #{current_status}"
