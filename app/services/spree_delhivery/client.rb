@@ -1,15 +1,10 @@
-require 'httparty'
+require 'faraday'
 require 'json'
 require 'uri'
 
 module SpreeDelhivery
   class Client
-    include HTTParty
-    
-    # Base Configuration
-    base_uri 'https://track.delhivery.com' 
-
-    attr_reader :integration
+    attr_reader :integration, :connection
 
     def initialize
       @integration = Spree::Integrations::Delhivery.active.first
@@ -17,17 +12,20 @@ module SpreeDelhivery
 
       @api_token = @integration.preferred_api_token.to_s.strip
       
-      # Environment Logic
-      if @integration.preferred_production_mode
-        self.class.base_uri 'https://track.delhivery.com'
-        @env_name = "PRODUCTION"
-      else
-        self.class.base_uri 'https://staging-express.delhivery.com'
-        @env_name = "STAGING"
+      # Determine base URL based on environment logic
+      base_url = if @integration.preferred_production_mode
+                   'https://track.delhivery.com'
+                 else
+                   'https://staging-express.delhivery.com'
+                 end
+
+      # Initialize thread-safe isolated Faraday instance
+      @connection = Faraday.new(url: base_url) do |conn|
+        conn.adapter Faraday.default_adapter
       end
     end
 
-    # Fetch Shipping Rate
+    # Fetch Shipping Rate (GET Request)
     def fetch_shipping_rate(source_pin:, dest_pin:, weight_gms:, mode: 'S')
       path = "/api/kinko/v1/invoice/charges/.json"
       api_mode = map_mode(mode)
@@ -41,22 +39,21 @@ module SpreeDelhivery
         pt: 'Pre-paid'
       }
       
-      response = self.class.get(path, query: params, headers: auth_headers)
-      data = response.parsed_response 
+      data = send_get_request(path, params)
       
       if data.is_a?(Hash) && data['total_amount']
-        return data['total_amount'].to_f
+        data['total_amount'].to_f
       elsif data.is_a?(Array) && data.first && data.first['total_amount']
-        return data.first['total_amount'].to_f
+        data.first['total_amount'].to_f
       else
-        return nil
+        nil
       end
     rescue => e
       Rails.logger.error "[Delhivery] Rate Exception: #{e.message}"
       nil
     end
 
-    # Calculate TAT
+    # Calculate TAT (GET Request)
     def calculate_tat(source_pin:, dest_pin:, mode: 'S')
       path = "/api/dc/expected_tat"
       api_mode = map_mode(mode)
@@ -69,18 +66,14 @@ module SpreeDelhivery
         token: @api_token 
       }
       
-      response = self.class.get(path, query: params, headers: auth_headers)
-      response.parsed_response.is_a?(Hash) ? response.parsed_response : nil
-    rescue => e
-      Rails.logger.error "[Delhivery] TAT Error: #{e.message}"
-      nil
+      data = send_get_request(path, params)
+      data.is_a?(Hash) ? data : nil
     end
     
-    # Fetch Pincode Details
+    # Fetch Pincode Details (GET Request)
     def fetch_pincode_details(pincode)
       path = "/c/api/pin-codes/json/"
-      response = self.class.get(path, query: { filter_codes: pincode }, headers: auth_headers)
-      data = response.parsed_response 
+      data = send_get_request(path, { filter_codes: pincode })
 
       find_city = ->(obj) do
         case obj
@@ -99,24 +92,21 @@ module SpreeDelhivery
       nil
     end
 
-    # Create Return Shipment
+    # Create Return Shipment (Form-urlencoded submission containing a nested JSON string)
     def create_return_request(return_auth, options = {})
       order = return_auth.order
       stock_location = return_auth.stock_location
       customer_address = order.ship_address
       
-      # Defaults if not provided
       brand_name = options[:brand].presence || @integration.preferred_client_name
       category_name = options[:category].presence || "General"
 
-      # Data Cleaning
       clean_phone = ->(p) { p.to_s.gsub(/[^0-9]/, '').last(10) }
       clean_str = ->(s) { s.to_s.gsub(/[^0-9a-zA-Z\s,\.\-]/, ' ').strip.first(100) }
       
       c_phone = clean_phone.call(customer_address.phone)
       w_phone = clean_phone.call(stock_location.phone)
       
-      # Construct Custom QC Items
       custom_qc_items = []
       
       return_auth.return_items.each do |ri|
@@ -142,13 +132,12 @@ module SpreeDelhivery
           "images" => [img_url], 
           "return_reason" => reason_text,
           "quantity" => 1,
-          "brand" => brand_name,       # <--- DYNAMIC
-          "product_category" => category_name, # <--- DYNAMIC
+          "brand" => brand_name,
+          "product_category" => category_name,
           "questions" => [] 
         }
       end
 
-      # Calculate Weight
       total_weight_gms = 0.0
       return_auth.inventory_units.each do |unit|
         w = unit.variant.weight.to_f
@@ -157,7 +146,6 @@ module SpreeDelhivery
       end
       total_weight_gms = 500 if total_weight_gms < 500
 
-      # Payload
       payload = {
         "shipments" => [
           {
@@ -198,59 +186,38 @@ module SpreeDelhivery
       }
 
       Rails.logger.info "[Delhivery] RVP Payload: #{payload.to_json}"
-
-      response = self.class.post(
-        "/api/cmu/create.json",
-        body: { "format" => "json", "data" => payload.to_json },
-        headers: { "Authorization" => "Token #{@api_token}" }
-      )
-      
-      JSON.parse(response.body) rescue { "error" => "Invalid JSON Response" }
-
-    rescue StandardError => e
-      Rails.logger.error "Delhivery Return Exception: #{e.message}"
-      { "error" => e.message }
+      send_post_form("/api/cmu/create.json", { "format" => "json", "data" => payload.to_json })
     end
 
-    # 5. Forward Shipment
+    # Forward Shipment (Form-urlencoded payload wrapper)
     def create_shipment(payload_data)
-      response = self.class.post("/api/cmu/create.json", 
-        body: { "format" => "json", "data" => payload_data.to_json }, 
-        headers: { "Authorization" => "Token #{@api_token}" }
-      )
-      JSON.parse(response.body) rescue {}
+      send_post_form("/api/cmu/create.json", { "format" => "json", "data" => payload_data.to_json })
     end
 
-    # 6. Fetch Wallet Balance
+    # Fetch Wallet Balance (GET Request)
     def fetch_balance
-      # This is the standard endpoint for checking Delhivery wallet balance
-      response = self.class.get("/api/client/get_balance_ledger.json", headers: auth_headers)
-      
-      if response.success? && response.parsed_response.is_a?(Hash)
-        # Returns format like: { "cash_balance" => "150.00", ... }
-        return response.parsed_response['cash_balance'] 
-      end
-      nil
+      data = send_get_request("/api/client/get_balance_ledger.json")
+      data.is_a?(Hash) ? data['cash_balance'] : nil
     rescue => e
       Rails.logger.error "[Delhivery] Balance Fetch Failed: #{e.message}"
       nil
     end
 
     def track_shipment(waybill)
-      send_get_request("/api/v1/packages/json/?waybill=#{waybill}")
+      send_get_request("/api/v1/packages/json/", { waybill: waybill })
     end
 
     def fetch_label(waybill)
-      send_get_request("/api/p/packing_slip?wbns=#{waybill}&pdf=true")
+      send_get_request("/api/p/packing_slip", { wbns: waybill, pdf: 'true' })
     end
 
     def create_pickup_request(location_name:, date:, time:, count: 1)
       payload = { pickup_location: location_name, pickup_date: date, pickup_time: time, expected_package_count: count }
-      post_json("/fm/request/new/", payload)
+      send_post_json("/fm/request/new/", payload)
     end
 
     def cancel_shipment(waybill)
-      post_json("/api/p/edit", { waybill: waybill, cancellation: true })
+      send_post_json("/api/p/edit", { waybill: waybill, cancellation: true })
     end
 
     private
@@ -260,18 +227,44 @@ module SpreeDelhivery
       ['express', 'e'].include?(str) ? 'E' : 'S'
     end
 
+    # Generalized GET Unified Helper
     def send_get_request(path, params = {})
-      response = self.class.get(path, query: params, headers: auth_headers)
-      response.parsed_response
+      response = @connection.get(path, params, auth_headers)
+      parse_response(response)
     rescue => e
+      Rails.logger.error "[Delhivery Client] GET Exception on #{path}: #{e.message}"
       { "error" => "Request Failed", "details" => e.message }
     end
 
-    def post_json(path, body = {})
-      response = self.class.post(path, body: body.to_json, headers: auth_headers.merge('Content-Type' => 'application/json'))
-      response.parsed_response
+    # Generalized Form URL Encoded Helper (For Manifest Creations)
+    def send_post_form(path, form_data = {})
+      response = @connection.post(path) do |req|
+        req.headers = auth_headers.merge('Content-Type' => 'application/x-www-form-urlencoded')
+        req.body = URI.encode_www_form(form_data)
+      end
+      parse_response(response)
     rescue => e
-       { "error" => "Request Failed", "details" => e.message }
+      Rails.logger.error "[Delhivery Client] Form POST Exception on #{path}: #{e.message}"
+      { "error" => "Request Failed", "details" => e.message }
+    end
+
+    # Generalized Raw JSON POST Helper (For Pickups and Cancellations)
+    def send_post_json(path, body_hash = {})
+      response = @connection.post(path) do |req|
+        req.headers = auth_headers.merge('Content-Type' => 'application/json')
+        req.body = body_hash.to_json
+      end
+      parse_response(response)
+    rescue => e
+      Rails.logger.error "[Delhivery Client] JSON POST Exception on #{path}: #{e.message}"
+      { "error" => "Request Failed", "details" => e.message }
+    end
+
+    # Resilient JSON Parser supporting Delhivery Content-Type fallbacks
+    def parse_response(response)
+      JSON.parse(response.body)
+    rescue JSON::ParserError
+      { "raw_body" => response.body, "status" => response.status }
     end
 
     def auth_headers
