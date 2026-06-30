@@ -5,7 +5,7 @@ require_relative "lib/spree_delhivery/version"
 Gem::Specification.new do |spec|
   spec.name = "spree_delhivery"
   spec.version = SpreeDelhivery::VERSION
-  spec.authors = ["Your Name"]
+  spec.authors = ["Umesh Ravani"]
   spec.email = ["umeshravani98@gmail.com"]
   spec.summary = "Official Delhivery Integration for Spree 5.2+"
   spec.homepage = "https://github.com/yourusername/spree_delhivery"
