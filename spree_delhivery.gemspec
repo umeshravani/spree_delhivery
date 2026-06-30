@@ -6,7 +6,7 @@ Gem::Specification.new do |spec|
   spec.name = "spree_delhivery"
   spec.version = SpreeDelhivery::VERSION
   spec.authors = ["Your Name"]
-  spec.email = ["your@email.com"]
+  spec.email = ["umeshravani98@gmail.com"]
   spec.summary = "Official Delhivery Integration for Spree 5.2+"
   spec.homepage = "https://github.com/yourusername/spree_delhivery"
   spec.license = "BSD-3-Clause"
