@@ -111,35 +111,35 @@ module Spree
         is_delivered = current_status.include?("DELIVERED") || 
                        (raw_data_string && raw_data_string.include?("DELIVERED"))
 
-        if is_delivered
-          ActiveRecord::Base.transaction do
-            # Find any pending COD payments on this order and capture them
-            @shipment.order.payments.valid.where(state: ['pending', 'checkout']).each do |payment|
-              if payment.payment_method&.type == 'Spree::PaymentMethod::DelhiveryCod'
-                payment.capture!
-                Rails.logger.info "[Delhivery] Auto-captured COD Payment #{payment.number} for Order #{@shipment.order.number}"
-              end
-            end
-            
-            # Crash Prevention: Spree doesn't natively support a 'delivered' state-machine path.
-            # We explicitly update columns to avoid NoMethodError on deliver!
-            @shipment.update_columns(
-              state: 'shipped',
-              tracking_status: 'DELIVERED',
-              shipped_at: @shipment.shipped_at || Time.current
-            )
-            
-            # Cleanly verify inventory states match deployment metrics
-            @shipment.inventory_units.where.not(state: 'shipped').update_all(state: 'shipped')
-            
-            # Force downstream state engine recalculations (Clears "Balance Due" badge to green Paid)
-            @shipment.order.updater.update
-          end
-
-          flash[:success] = "Shipment Delivered! COD Payment automatically captured and reconciled."
-          redirect_to spree.edit_admin_order_path(@shipment.order), status: :see_other
-          return
-        end
+                       if is_delivered
+                        ActiveRecord::Base.transaction do
+                          # 1. Capture Payments
+                          @shipment.order.payments.valid.where(state: ['pending', 'checkout']).each do |payment|
+                            if payment.payment_method&.type == 'Spree::PaymentMethod::DelhiveryCod'
+                              payment.capture!
+                            end
+                          end
+                          
+                          # 2. FIX: Remove @shipment.deliver! and replace with explicit status update
+                          # Since 'delivered' isn't a state in Spree, we treat it as 'shipped' 
+                          # and track the status in the custom field
+                          @shipment.update_columns(
+                            state: 'shipped', 
+                            tracking_status: 'DELIVERED',
+                            shipped_at: @shipment.shipped_at || Time.current
+                          )
+                          
+                          # Ensure inventory is marked shipped
+                          @shipment.inventory_units.where.not(state: 'shipped').update_all(state: 'shipped')
+                          
+                          # Force refresh order totals
+                          @shipment.order.updater.update
+                        end
+              
+                        flash[:success] = "Shipment Delivered! COD Payment captured."
+                        redirect_to spree.edit_admin_order_path(@shipment.order), status: :see_other
+                        return
+                      end
 
         # STANDARD TRACKING UPDATE
         if result.success?
