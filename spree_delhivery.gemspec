@@ -1,21 +1,22 @@
-# frozen_string_literal: true
+# encoding: UTF-8
 
-require_relative "lib/spree_delhivery/version"
+Gem::Specification.new do |s|
+  s.platform    = Gem::Platform::RUBY
+  s.name        = 'spree_delhivery'
+  s.version     = '6.0.0'
+  s.authors     = ['Spree Commerce']
+  s.email       = 'hello@spreecommerce.org'
+  s.summary     = 'Delhivery Fulfillment and Shipping Provider for Spree Commerce'
+  s.description = 'Delhivery shipping rates, labels, and tracking for Spree 6'
+  s.homepage    = 'https://spreecommerce.org'
+  s.license     = 'MIT'
 
-Gem::Specification.new do |spec|
-  spec.name = "spree_delhivery"
-  spec.version = SpreeDelhivery::VERSION
-  spec.authors = ["Umesh Ravani"]
-  spec.email = ["umeshravani98@gmail.com"]
-  spec.summary = "Official Delhivery Integration for Spree 5.2+"
-  spec.homepage = "https://github.com/yourusername/spree_delhivery"
-  spec.license = "BSD-3-Clause"
+  s.required_ruby_version = '>= 3.2'
 
-  spec.files = Dir.chdir(File.expand_path(__dir__)) do
-    Dir["{app,config,db,lib}/**/*", "MIT-LICENSE", "Rakefile", "README.md"]
-  end
+  s.files        = Dir["{app,config,db,lib,vendor}/**/*", "Rakefile", "LICENSE", "README.md"].reject { |f| f.match(/^spec/) && !f.match(/^spec\/fixtures/) }
+  s.require_path = 'lib'
 
-  spec.add_dependency "spree_core", ">= 5.2.0"
-  spec.add_dependency "spree_extension"
-  spec.add_dependency "faraday", ">= 2.0"
+  s.add_dependency 'spree_core', '>= 6.0.0.beta1'
+  s.add_dependency 'faraday', '~> 2.0'
+
 end

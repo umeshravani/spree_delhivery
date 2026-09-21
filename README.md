@@ -1,175 +1,225 @@
-# Spree Delhivery Integration
+# Spree Delhivery (Spree 6 / Next.js Storefront)
 
-<img width="300" height="auto" alt="delhivery Header" src="https://github.com/user-attachments/assets/c3fb2919-a732-4719-905a-54d202380703" /><br>
-
-This extension provides a comprehensive integration between **Spree Commerce** and **Delhivery Logistics**. It streamlines your shipping workflow by allowing you to generate waybills, schedule pickups, print labels, and track shipments directly from the Spree Admin panel. It also enhances the customer experience with a storefront delivery availability widget.
-
-## 🚀 Key Features
-
-### 📦 Admin Logistics & Fulfillment
-* **Live Shipping Rates:** Automatically calculates shipping costs based on product weight (volumetric vs actual) and distance.
-* **One-Click Manifesting:** Generate Delhivery Waybills and tracking numbers directly from the Shipment card.
-* **Label Printing:** Download and print official PDF shipping labels (AWB).
-* **Pickup Scheduling:** Schedule carrier pickups for specific dates and times directly from the Admin UI.
-* **Tracking Sync:** Real-time status updates (e.g., *In Transit, Out for Delivery, Delivered, RTO*) displayed with color-coded badges.
-* **Cancellation:** Void/Cancel waybills before pickup directly from Spree.
-
-### 📍 Warehouse Management (Geolocation)
-* **Interactive Map:** Upgraded Stock Location form with a **Leaflet.js** map.
-* **Pinpoint Accuracy:** Search for cities or drag the pin to set precise Latitude/Longitude for accurate pickup calculations.
-* **Auto-Fill:** Automatically captures coordinates to ensure accurate logistics routing.
-
-### 🛍️ Storefront Experience (PDP Widget)
-* **Delivery Checker:** Users can enter their Pincode to check serviceability.
-* **Smart Location Detection:** improved logic to detect and display **"City, District, State"** (e.g., *Bardoli, Surat, Gujarat*) instead of just the post office name.
-* **Estimated Delivery Date (EDD):** Shows dynamic delivery dates based on Delhivery TAT API.
-* **Countdown Timer:** "Order within 2 hrs 30 mins for delivery by Tuesday" logic.
-* **Customizable UI:** Admin controls for widget colors, headings, and placeholder text.
+This plugin integrates **Delhivery** with Spree 6 for automated shipping rate calculations, multi-vendor marketplace fulfillment, and a dynamic **Cash on Delivery (COD) Surcharge** that works seamlessly with the official Spree 6 Next.js Storefront.
 
 ---
 
-## 🛠 Installation
+## Features
 
-1. Add this line to your application's `Gemfile`:
+- **Live Shipping Rates**: Real-time shipping rate calculation (`Delhivery Surface` and `Delhivery Express`) via Delhivery's Kinko API.
+- **Automated Fulfillment**: AWB assignment, label generation, and dispatch tracking through Delhivery APIs.
+- **Multi-Vendor Marketplace Aware**:
+  - Dynamically extracts vendor seller details for Spree 6 split orders (`R10...-1`, `R10...-2`).
+  - Matches exact registered vendor stock locations in Delhivery for pickup routing and packing slip labels.
+- **Dynamic Cash on Delivery (COD) Surcharge**:
+  - Configurable surcharge amount (e.g. ₹90.00) in Admin Integrations.
+  - Automatically applied as a `Spree::Fee` (`kind: 'cod'`) via Spree 6's native Adjuster pipeline.
+  - Surcharge dynamically appears in storefront checkout when COD is selected and disappears when switching to prepaid methods (e.g. Razorpay).
+  - Preserved on the order through `Spree::Carts::Complete` into order totals, fees, and customer invoices.
 
+---
+
+## Backend Installation & Setup
+
+### 1. Add Plugin to Gemfile
+
+In `server/Gemfile`:
 ```ruby
-gem 'spree_delhivery', github: 'umeshravani/spree_delhivery'
+gem 'spree_delhivery', path: 'plugins/delhivery'
 ```
-2. Install the Gem:
 
-```ruby
+Run bundle install:
+```bash
 bundle install
 ```
-3. Run the installation generator:
 
-   • This installs migrations.<br>
-   • Runs migrations (optional).<br>
-   • Seeds Shipping Methods: Automatically creates "Delhivery Surface" and "Delhivery Express" shipping methods with correct preferences.
+### 2. Auto-Seed Delhivery Profile, Delivery Methods & COD Payment Method
 
-```ruby
-bundle exec rails g spree_delhivery:install
+You can automatically create the **Delhivery Delivery Profile**, both delivery methods (**Delhivery Express** & **Delhivery Surface**), and the **Delhivery COD Payment Method** by running the install rake task:
+
+```bash
+bin/rails spree_delhivery:install
 ```
-<br>
+*(Or `bin/rails spree_delhivery:seeds`)*
 
- ## ⚙️ Configuration
- 
- ### 1. General Settings
-  
-  Go to Admin Panel -> Integrations -> Delhivery.
-  
-<img width="279" height="332" alt="Integrations Page" src="https://github.com/user-attachments/assets/3da6c1be-92b3-410c-ab00-f0bb27e79099" /><br>
-  
+This creates:
+- **Delivery Profile**: `Delhivery` (`Spree::DeliveryProfiles::Shipping`)
+- **Delivery Methods**:
+  1. `Delhivery Express` (Rate Provider & Fulfillment Provider: `Delhivery`)
+  2. `Delhivery Surface` (Rate Provider & Fulfillment Provider: `Delhivery`)
+- **Payment Method**: `Cash on Delivery (Delhivery COD)` (`Spree::PaymentMethod::DelhiveryCod`)
 
-  • API Token: Enter your Delhivery API Token (masked for security).
+---
 
-  • Production Mode: Check this box for live shipments. Uncheck for Sandbox/Testing.
+### 3. Configure Delhivery in Spree Admin
 
-  • Pickup Location: Crucial. This must match the exact warehouse name registered in your Delhivery Dashboard.
+1. Log in to the Spree Admin Dashboard (`/admin` or `http://localhost:5173`).
+2. Go to **Settings > Integrations > Delhivery**.
+3. Fill in your Delhivery credentials:
+   - **API Token**: Your Delhivery production or sandbox API token.
+   - **Client Name**: Your Delhivery registered client name.
+   - **Pickup Location**: The registered pickup location/warehouse name in your Delhivery dashboard.
+   - **COD Surcharge**: The extra fee to charge customers who choose Cash on Delivery (e.g., `90` for ₹90.00). Leave `0` for free COD.
+4. Save the integration.
 
-  • Unit Mapping: Select how your store stores Weight (kg/lbs) and Dimensions (cm/in) so the calculator converts them correctly for the API.<br>
+---
 
-  <img width="500" height="auto" alt="Integration Settings Delhivery" src="https://github.com/user-attachments/assets/d74ff3ca-13c2-4ff4-9465-2f7e483a9955" /><br>
+## Storefront (Next.js) Implementation Guide
 
+To integrate the Delhivery plugin with a fresh Spree 6 Next.js Storefront (`apps/storefront`), make the following updates across 3 key files:
 
-  ### 2. Shipping Methods
-  
-   If you didn't seed them during install, create a Shipping Method in Admin -> Shipping -> Shipping Methods:
+### 1. Display Surcharge in Checkout Summary
 
-  • Calculator: Select Delhivery Live Rate.
+By default, the storefront checkout summary renders tax and shipping, but not fees. Add the `COD Surcharge` row.
 
-  • Service Mode: Enter Surface or Express.
+**File:** `apps/storefront/src/components/checkout/Summary.tsx`
 
-  • Tracking URL: https://www.delhivery.com/track/package/:tracking <br>
+Locate the `tax` total row in the totals section and insert the `fee_total` block right after it:
 
-  <img width="800" height="auto" alt="Shipping Methods (Auto Added)" src="https://github.com/user-attachments/assets/017a6fda-3059-4bfc-97aa-29f21674e1b4" /><br>
+```tsx
+{parseFloat(cart.tax_total ?? "0") > 0 && (
+  <div className="flex justify-between text-sm">
+    <span className="text-gray-700">{tc("tax")}</span>
+    <span className="text-gray-900">{cart.display_tax_total}</span>
+  </div>
+)}
 
+{/* Add COD Surcharge row */}
+{parseFloat(cart.fee_total ?? "0") > 0 && (
+  <div className="flex justify-between text-sm">
+    <span className="text-gray-700">COD Surcharge</span>
+    <span className="text-gray-900">{cart.display_fee_total}</span>
+  </div>
+)}
+```
 
-  ### 3. Widget Configuration
-  
-  Go to Admin -> Content -> Page Blocks -> Delhivery EDD.
+---
 
-  • Customize the Heading, Button Text, and Colors.
+### 2. Display Surcharge on Order Confirmation & Order Detail Pages
 
-  • Set the Cutoff Time (e.g., 2:00 PM) to control the "Order within..." countdown timer.<br>
+Ensure the customer and admin see the COD fee on the order thank-you page and in customer account history.
 
-  <img width="800" height="auto" alt="Delhivery EDD Widget" src="https://github.com/user-attachments/assets/8802836d-ad0c-4ccb-9bad-629a508322ae" /><br>
+**File:** `apps/storefront/src/components/order/OrderTotals.tsx`
 
+Locate the `tax` total row and add the `fee_total` block:
 
- ## 🖥️ Usage Guide
- 
-  ### Fulfillment Workflow (Admin)
-  
-  1. Navigate to Orders -> Order # -> Shipments.
+```tsx
+{Number.parseFloat(order.tax_total ?? "0") > 0 && (
+  <div className="flex justify-between text-sm">
+    <span className="text-gray-500">{t("tax")}</span>
+    <span className="text-gray-900">{order.display_tax_total}</span>
+  </div>
+)}
 
-  2. You will see the unified Delhivery Toolbar on the shipment card.
+{/* Add COD Surcharge row */}
+{Number.parseFloat(order.fee_total ?? "0") > 0 && (
+  <div className="flex justify-between text-sm">
+    <span className="text-gray-500">COD Surcharge</span>
+    <span className="text-gray-900">{order.display_fee_total}</span>
+  </div>
+)}
+```
 
-  3. Ship: Click "Ship with Delhivery". This generates the AWB.
+---
 
-  4. Print: Click the Printer icon to get the PDF label.
+### 3. Sync Direct Payment on Selection and Mount
 
-  5. Pickup: Click the Truck icon to open the Schedule Pickup Modal. Select date/time and confirm.
+When a customer selects Cash on Delivery (or if COD is preselected on page load), the storefront must issue `createDirectPayment` so the backend recalculates cart totals with the COD surcharge before the customer clicks "Place Order". Switching to prepaid (e.g., Razorpay) clears the surcharge.
 
-  6. Track: Click the Refresh icon to pull the latest status from Delhivery.<br>
+**File:** `apps/storefront/src/components/checkout/PaymentSection.tsx`
 
-  
-  <img width="800" height="auto" alt="Orders Page (Unshipped Order)" src="https://github.com/user-attachments/assets/1c1527b3-4096-4b26-a594-5ebe3f528677" /><br>
+#### A. In the Mount `useEffect`:
+Update the initial mount effect to create the direct payment if a COD payment method is active on mount:
 
-  <img width="800" height="560" alt="Shipped Order (Orders Page)" src="https://github.com/user-attachments/assets/9dc19710-e5b9-4e69-a862-ea7d02d1cb13" /><br>
+```tsx
+  useEffect(() => {
+    if (initRef.current) return;
+    if (!selectedMethod) return;
+    if (isZeroAmount) return;
 
+    if (!isSessionBased) {
+      initRef.current = true;
+      if (
+        selectedMethod.type === "Spree::PaymentMethod::DelhiveryCod" &&
+        parseFloat(cart.fee_total ?? "0") === 0
+      ) {
+        setLoading(true);
+        createDirectPayment(cart.id, selectedMethod.id).finally(() => {
+          setLoading(false);
+          router.refresh();
+        });
+      }
+      return;
+    }
 
- ### Storefront Widget
- 
-  To display the Pincode checker on your product page, add this helper to your products/show view file:
+    initRef.current = true;
+    // ... rest of session loading (Stripe, Razorpay, etc.)
+```
 
-  1. Find your Partial file Example: 
-  ```
-    'app/views/themes/default/spree/page_sections/_product_details.html.erb'
-  ```
-Note: If you dont find this file inside your spree's directory, You can [Download](https://github.com/spree/spree/blob/df400d3557c244ec3829f175a27f3990cdeb2452/storefront/app/views/themes/default/spree/page_sections/_product_details.html.erb#L4) this directly from Spree's Github and place it exactly inside your Spree's directory
+Ensure `cart.id`, `cart.fee_total`, and `router` are included in the dependency array:
+```tsx
+  }, [
+    cart.id,
+    cart.fee_total,
+    router,
+    selectedMethod,
+    isSessionBased,
+    isAuthenticated,
+    createSession,
+    cart.total,
+    isZeroAmount,
+  ]);
+```
 
-  2. Place this Rendering Code:
-  
-   ```ruby
-    <% when 'Spree::PageBlocks::Products::DelhiveryEdd' %>
-    <%= block.render(self, product: product) %> 
-   ```
-  3. Exactly below this part:
-   ```
-    <% when 'Spree::PageBlocks::Products::Description' %>
-   ```
+#### B. In `handleMethodSelect`:
+Update `handleMethodSelect` so selecting COD triggers `createDirectPayment` and refreshes totals:
 
- ## 🧩 Technical Details
- 
- • Maps: Uses OpenStreetMap + Leaflet.js (No Google Maps API key required).
+```tsx
+  const handleMethodSelect = (methodId: string) => {
+    const newMethod = paymentMethods.find((pm) => pm.id === methodId);
+    if (!newMethod) return;
 
+    if (methodId === selectedMethodId) {
+      if (newMethod.session_required) return;
+      if (
+        newMethod.type === "Spree::PaymentMethod::DelhiveryCod" &&
+        parseFloat(cart.fee_total ?? "0") > 0
+      ) {
+        return;
+      }
+    }
 
- • Turbo Support: Fully compatible with Turbo Drive; map re-initializes correctly on page transitions.
+    setSelectedMethodId(methodId);
 
+    if (newMethod.session_required) {
+      // Switching to session-based method (e.g., Razorpay)
+      createSession(selectedCardRef.current, newMethod);
+    } else {
+      // Switching to direct method (Cash on Delivery)
+      sessionRequestIdRef.current += 1;
+      setSessionExternalData(null);
+      setPaymentSessionId(null);
+      setGatewayError(null);
+      gatewayHandleRef.current = null;
+      setLoading(true);
+      createDirectPayment(cart.id, newMethod.id).finally(() => {
+        setLoading(false);
+        router.refresh();
+      });
+    }
+  };
+```
 
- • Styling: Uses Tailwind CSS utility classes matching Spree's default admin theme.
+---
 
+## How It Works Under the Hood
 
- • Calculations: Handles volumetric weight calculation (L x W x H) / 5000 automatically based on your unit settings.<br>
-
- <img width="800" height="auto" alt="Stock Locations Page (Delhivery Settings)" src="https://github.com/user-attachments/assets/729f5abf-afe7-430f-87ef-93a52997e0c4" /><br>
-
-
- ## 🛒 Checkout Page Auto-Calculation
- 
- Eliminate guesswork and undercharging for shipping. This extension integrates directly into the Spree Checkout flow (Delivery Step) to provide accurate costs instantly.
-
- • Live API Calls: As soon as a customer enters their shipping address, the calculator queries the Delhivery API for real-time rates based on the specific source and destination pincodes.
-
- • Volumetric Weight Logic: Automatically calculates (Length x Width x Height) / 5000 and compares it against the actual weight. The API requests the rate based on whichever is higher, ensuring you never lose money on bulky, lightweight items.
-
- • Performance Caching: Rate responses are cached for 15 minutes to ensure fast page loads and prevent hitting API rate limits during high traffic.
-
- • Handling Fee Support: Easily add a fixed handling/packing fee on top of the live carrier rate via the Shipping Method preferences.<br>
- 
- <br><img width="800" height="auto" alt="Checkout Page (Auto Calculate Shipping Costs)" src="https://github.com/user-attachments/assets/aa983ad0-638a-4140-971f-f1f56dead652" />
-
-
-
- ## 🤝 Contributing
- 
-   Bug reports and pull requests are welcome on GitHub. This project is intended to be a safe, welcoming space for collaboration.
+1. **Spree 6 Cart Architecture**:
+   In Spree 6 API V3, checkout is driven by `Spree::Cart`. The plugin registers `Spree::Adjusters::DelhiveryCodFee < Spree::Adjusters::Base` into `Spree.adjusters`.
+2. **Dynamic Adjuster Lifecycle**:
+   Every time totals recalculate (`cart.recalculate_totals!`), `Spree::Carts::RecalculateTotals` runs all registered adjusters. If a valid `Spree::PaymentMethod::DelhiveryCod` payment is on the cart and no active session method is chosen, the adjuster creates or updates a `Spree::Fee(label: 'COD Surcharge', kind: 'cod', amount: surcharge)`. If the customer switches to prepaid, the adjuster destroys the fee automatically.
+3. **API Controller Synchronization**:
+   - `PaymentsControllerDecorator`: When `POST /api/v3/store/carts/:id/payments` creates a COD payment, it cancels pending sessions, recalculates `@cart.recalculate_totals!`, and syncs `@payment.amount` to the new total with the surcharge.
+   - `PaymentSessionsControllerDecorator`: When `POST /api/v3/store/carts/:id/payment_sessions` initiates a prepaid gateway session, it invalidates any COD checkout payment and recalculates `@cart.recalculate_totals!` to immediately strip the COD surcharge.
+4. **Order Placement (`Spree::Carts::Complete`)**:
+   During order completion, `copy_typed_lines!` copies the `Spree::Fee` from `cart` to `order`, guaranteeing that totals and fees match exactly across both the customer invoice and Admin order management.

@@ -1,57 +1,69 @@
+# frozen_string_literal: true
+
 module Spree
-  class PaymentMethod::DelhiveryCod < PaymentMethod
-    def method_type
-      'delhivery_cod'
-    end
+  class PaymentMethod < Spree::Base
+    class DelhiveryCod < Spree::PaymentMethod
+      def actions
+        %w{capture void}
+      end
 
-    def payment_icon_name
-      'delhivery_cod'
-    end
+      def can_capture?(payment)
+        ['checkout', 'pending'].include?(payment.status)
+      end
 
-    def description_partial_name
-      'delhivery_cod'
-    end
+      def can_void?(payment)
+        payment.status != 'void'
+      end
 
-    def configuration_guide_partial_name
-      'delhivery_cod'
-    end
-    
-    def source_required?
-      false
-    end
+      def authorize(*)
+        simulated_successful_billing_response
+      end
 
-    def auto_capture?
-      false
-    end
+      def purchase(*)
+        simulated_successful_billing_response
+      end
 
-    def actions
-      %w{authorize capture void purchase}
-    end
+      def capture(*)
+        simulated_successful_billing_response
+      end
 
-    def can_capture?(payment)
-      ['checkout', 'pending'].include?(payment.state)
-    end
+      def cancel(*, **)
+        simulated_successful_billing_response
+      end
 
-    def can_void?(payment)
-      payment.state != 'void'
-    end
+      def void(*)
+        simulated_successful_billing_response
+      end
 
-    # Satisfies the Spree API and Rails Checkout authorization step
-    def authorize(*args)
-      ActiveMerchant::Billing::Response.new(true, "Delhivery COD Authorized", {}, {})
-    end
+      def credit(*)
+        simulated_successful_billing_response
+      end
 
-    # Satisfies checkout engines that try to purchase immediately
-    def purchase(*args)
-      ActiveMerchant::Billing::Response.new(true, "Delhivery COD Purchased", {}, {})
-    end
+      def source_required?
+        false
+      end
 
-    def capture(*args)
-      ActiveMerchant::Billing::Response.new(true, "Delhivery COD Captured", {}, {})
-    end
+      def payment_source_class
+        nil
+      end
 
-    def void(*args)
-      ActiveMerchant::Billing::Response.new(true, "Delhivery COD Voided", {}, {})
+      def auto_capture?
+        false
+      end
+
+      def method_type
+        'spree_delhivery_cod'
+      end
+
+      def session_required?
+        false
+      end
+
+      private
+
+      def simulated_successful_billing_response
+        Spree::PaymentResponse.new(true, '', {}, {})
+      end
     end
   end
 end

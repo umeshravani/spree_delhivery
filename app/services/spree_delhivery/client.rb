@@ -1,274 +1,247 @@
+# frozen_string_literal: true
+
 require 'faraday'
 require 'json'
 require 'uri'
 
 module SpreeDelhivery
   class Client
-    attr_reader :integration, :connection
+    LIVE_URL    = 'https://track.delhivery.com'
+    STAGING_URL = 'https://staging-express.delhivery.com'
 
-    def initialize
-      @integration = Spree::Integrations::Delhivery.active.first
-      raise "Delhivery Integration is not active or configured" unless @integration
+    attr_reader :api_token, :client_name, :base_url
 
-      @api_token = @integration.preferred_api_token.to_s.strip
-      
-      # Determine base URL based on environment logic
-      base_url = if @integration.preferred_production_mode
-                   'https://track.delhivery.com'
-                 else
-                   'https://staging-express.delhivery.com'
-                 end
-
-      # Initialize thread-safe isolated Faraday instance
-      @connection = Faraday.new(url: base_url) do |conn|
-        conn.adapter Faraday.default_adapter
-      end
+    def initialize(api_token:, client_name: nil, test_mode: false)
+      @api_token   = api_token.to_s.strip
+      @client_name = client_name.to_s.strip
+      @base_url    = test_mode ? STAGING_URL : LIVE_URL
     end
 
-    # Fetch Shipping Rate (GET Request)
-    def fetch_shipping_rate(source_pin:, dest_pin:, weight_gms:, mode: 'S')
-      path = "/api/kinko/v1/invoice/charges/.json"
-      api_mode = map_mode(mode)
+    # --- 1. PIN Code Serviceability ---
+    def serviceability(pin:)
+      response = connection.get('/c/api/pin-codes/json/') do |req|
+        req.params['filter_codes'] = pin.to_s.strip
+      end
 
-      params = {
-        md: api_mode, 
-        ss: 'Delivered', 
-        d_pin: dest_pin, 
-        o_pin: source_pin, 
-        cgm: weight_gms, 
-        pt: 'Pre-paid'
+      if response.status == 401 && @base_url != LIVE_URL
+        response = connection(LIVE_URL).get('/c/api/pin-codes/json/') do |req|
+          req.params['filter_codes'] = pin.to_s.strip
+        end
+      end
+
+      return false unless response.success?
+
+      data = parse_json(response.body)
+      codes = data['delivery_codes'] || []
+      codes.any? { |c| c.dig('postal_code', 'pin').to_s == pin.to_s.strip }
+    rescue StandardError => e
+      Rails.logger.error("[Delhivery] Serviceability error: #{e.message}")
+      false
+    end
+
+    def check_pincode(pincode)
+      serviceability(pin: pincode)
+    end
+
+    # --- 2. Live Dynamic Rate Calculation (Kinko API) ---
+    def calculate_rate(origin_pin:, destination_pin:, weight_in_grams:, mode: 'E', payment_type: 'Pre-paid')
+      response = connection.get('/api/kinko/v1/invoice/charges.json') do |req|
+        req.params['md']    = mode # 'E' (Express/Air) or 'S' (Surface)
+        req.params['ss']    = 'Delivered'
+        req.params['d_pin'] = destination_pin.to_s.strip
+        req.params['o_pin'] = origin_pin.to_s.strip
+        req.params['cgm']   = [weight_in_grams.to_f, 50.0].max.to_i
+        req.params['pt']    = payment_type # 'Pre-paid' or 'COD'
+      end
+
+      if response.status == 401 && @base_url != LIVE_URL
+        response = connection(LIVE_URL).get('/api/kinko/v1/invoice/charges.json') do |req|
+          req.params['md']    = mode
+          req.params['ss']    = 'Delivered'
+          req.params['d_pin'] = destination_pin.to_s.strip
+          req.params['o_pin'] = origin_pin.to_s.strip
+          req.params['cgm']   = [weight_in_grams.to_f, 50.0].max.to_i
+          req.params['pt']    = payment_type
+        end
+      end
+
+      return nil unless response.success?
+
+      data = parse_json(response.body)
+      first_quote = data.is_a?(Array) ? data.first : data
+      total = first_quote&.dig('total_amount')
+      total.present? ? total.to_f : nil
+    rescue StandardError => e
+      Rails.logger.error("[Delhivery] Rate calculation error: #{e.message}")
+      nil
+    end
+
+    # --- 3. Shipment Booking (CMU Create API) ---
+    def create_shipment(payload:)
+      active_url = @base_url
+      conn = Faraday.new(url: active_url) do |f|
+        f.request :url_encoded
+        f.adapter Faraday.default_adapter
+      end
+
+      response = conn.post('/api/cmu/create.json') do |req|
+        req.headers['Authorization'] = "Token #{@api_token}"
+        req.headers['Accept']        = 'application/json'
+        req.body = { format: 'json', data: payload.to_json }
+      end
+
+      if response.status == 401 && active_url != LIVE_URL
+        active_url = LIVE_URL
+        conn = Faraday.new(url: active_url) do |f|
+          f.request :url_encoded
+          f.adapter Faraday.default_adapter
+        end
+        response = conn.post('/api/cmu/create.json') do |req|
+          req.headers['Authorization'] = "Token #{@api_token}"
+          req.headers['Accept']        = 'application/json'
+          req.body = { format: 'json', data: payload.to_json }
+        end
+      end
+
+      data = parse_json(response.body)
+
+      unless response.success?
+        error_msg = data['error'] || data['rmk'] || response.body
+        raise Spree::Core::LabelPurchaseRefused, "Delhivery API Error: #{error_msg}"
+      end
+
+      pkg = data['packages']&.first
+      if pkg.nil? || pkg['status'] != 'Success'
+        remarks = Array(pkg&.dig('remarks')).join(', ').presence || data['rmk'] || data['cash_status'] || 'Shipment creation failed'
+        raise Spree::Core::LabelPurchaseRefused, "Delhivery rejected shipment: #{remarks}"
+      end
+
+      {
+        waybill: pkg['waybill'],
+        upload_wbn: data['upload_wbn'],
+        sort_code: pkg['sort_code']
       }
-      
-      data = send_get_request(path, params)
-      
-      if data.is_a?(Hash) && data['total_amount']
-        data['total_amount'].to_f
-      elsif data.is_a?(Array) && data.first && data.first['total_amount']
-        data.first['total_amount'].to_f
+    end
+
+    # --- 4. Fetch Official Delhivery PDF Label URL ---
+    def fetch_packing_slip_url(waybill:)
+      response = connection.get('/api/p/packing_slip') do |req|
+        req.params['wbns']     = waybill.to_s.strip
+        req.params['pdf']      = 'true'
+        req.params['pdf_size'] = '4R' # 4x6 standard format that fits edge-to-edge
+      end
+
+      if response.status == 401 && @base_url != LIVE_URL
+        response = connection(LIVE_URL).get('/api/p/packing_slip') do |req|
+          req.params['wbns']     = waybill.to_s.strip
+          req.params['pdf']      = 'true'
+          req.params['pdf_size'] = '4R'
+        end
+      end
+
+      if response.success?
+        data = parse_json(response.body)
+        pkg = data['packages']&.first
+        pkg&.dig('pdf_download_link')
       else
         nil
       end
-    rescue => e
-      Rails.logger.error "[Delhivery] Rate Exception: #{e.message}"
+    rescue StandardError => e
+      Rails.logger.error("[Delhivery] Packing slip fetch error: #{e.message}")
       nil
     end
 
-    # Calculate TAT (GET Request)
-    def calculate_tat(source_pin:, dest_pin:, mode: 'S')
-      path = "/api/dc/expected_tat"
-      api_mode = map_mode(mode)
-
-      params = { 
-        origin_pin: source_pin, 
-        destination_pin: dest_pin, 
-        mot: api_mode, 
-        pdt: 'Pre-paid',
-        token: @api_token 
-      }
-      
-      data = send_get_request(path, params)
-      data.is_a?(Hash) ? data : nil
-    end
-    
-    # Fetch Pincode Details (GET Request)
-    def fetch_pincode_details(pincode)
-      path = "/c/api/pin-codes/json/"
-      data = send_get_request(path, { filter_codes: pincode })
-
-      find_city = ->(obj) do
-        case obj
-        when Hash
-          return obj if obj.key?('city') || obj.key?(:city)
-          obj.each_value { |v| res = find_city.call(v); return res if res }
-        when Array
-          obj.each { |v| res = find_city.call(v); return res if res }
-        end
-        nil
+    # --- 5. Shipment Cancellation ---
+    def cancel_shipment(waybill:)
+      response = connection.post('/api/p/edit') do |req|
+        req.headers['Authorization'] = "Token #{@api_token}"
+        req.headers['Content-Type']  = 'application/json'
+        req.body = { waybill: waybill.to_s.strip, cancellation: 'true' }.to_json
       end
 
-      find_city.call(data)
-    rescue => e
-      Rails.logger.error "[Delhivery] City Error: #{e.message}"
-      nil
+      if response.status == 401 && @base_url != LIVE_URL
+        response = connection(LIVE_URL).post('/api/p/edit') do |req|
+          req.headers['Authorization'] = "Token #{@api_token}"
+          req.headers['Content-Type']  = 'application/json'
+          req.body = { waybill: waybill.to_s.strip, cancellation: 'true' }.to_json
+        end
+      end
+
+      response.success?
+    rescue StandardError => e
+      Rails.logger.error("[Delhivery] Cancel error: #{e.message}")
+      false
     end
 
-    # Create Return Shipment (Form-urlencoded submission containing a nested JSON string)
-    def create_return_request(return_auth, options = {})
-      order = return_auth.order
-      stock_location = return_auth.stock_location
-      customer_address = order.ship_address
-      
-      brand_name = options[:brand].presence || @integration.preferred_client_name
-      category_name = options[:category].presence || "General"
+    # --- 6. Client Warehouse Registration ---
+    def register_warehouse(name:, address:, city:, pin:, phone:, registered_name: nil, return_address: nil, return_city: nil, return_pin: nil)
+      clean_phone = phone.to_s.gsub(/\D/, '').last(10).presence || '9999999999'
+      clean_pin   = pin.to_s.gsub(/\D/, '').strip
+      full_addr   = address.to_s.truncate(200)
 
-      clean_phone = ->(p) { p.to_s.gsub(/[^0-9]/, '').last(10) }
-      clean_str = ->(s) { s.to_s.gsub(/[^0-9a-zA-Z\s,\.\-]/, ' ').strip.first(100) }
-      
-      c_phone = clean_phone.call(customer_address.phone)
-      w_phone = clean_phone.call(stock_location.phone)
-      
-      custom_qc_items = []
-      
-      return_auth.return_items.each do |ri|
-        variant = ri.inventory_unit.variant
-        
-        img_url = "https://via.placeholder.com/150"
-        if variant.images.any?
-          img_url = variant.images.first.attachment.url(:small) rescue img_url
-        elsif variant.product.images.any?
-          img_url = variant.product.images.first.attachment.url(:small) rescue img_url
-        end
-
-        reason_text = "Customer Return"
-        if ri.respond_to?(:return_reason) && ri.return_reason.present?
-          reason_text = ri.return_reason.name
-        elsif return_auth.respond_to?(:reason) && return_auth.reason.present?
-          reason_text = return_auth.reason.name
-        end
-
-        custom_qc_items << {
-          "item" => variant.name.first(30),
-          "description" => variant.product.description&.first(50) || variant.name,
-          "images" => [img_url], 
-          "return_reason" => reason_text,
-          "quantity" => 1,
-          "brand" => brand_name,
-          "product_category" => category_name,
-          "questions" => [] 
-        }
-      end
-
-      total_weight_gms = 0.0
-      return_auth.inventory_units.each do |unit|
-        w = unit.variant.weight.to_f
-        w = (w < 50) ? w * 1000.0 : w
-        total_weight_gms += w
-      end
-      total_weight_gms = 500 if total_weight_gms < 500
-
-      payload = {
-        "shipments" => [
-          {
-            "client" => @integration.preferred_client_name,
-            "order" => return_auth.number,
-            "waybill" => "",
-            "name" => customer_address.full_name,
-            "add" => clean_str.call(customer_address.address1),
-            "city" => customer_address.city,
-            "state" => customer_address.state&.name || customer_address.state_name,
-            "country" => "India",
-            "phone" => c_phone,
-            "pin" => customer_address.zipcode,
-            
-            "return_name" => stock_location.name,
-            "return_add" => clean_str.call(stock_location.address1),
-            "return_city" => stock_location.city,
-            "return_state" => stock_location.state&.name || stock_location.state_name,
-            "return_country" => "India",
-            "return_pin" => stock_location.zipcode,
-            "return_phone" => w_phone,
-            
-            "payment_mode" => "Pickup",
-            "products_desc" => "Return #{order.number}",
-            "quantity" => return_auth.return_items.count,
-            "weight" => total_weight_gms.to_i,
-            "total_amount" => 0,
-            "shipping_mode" => "Surface",
-            "order_date" => Time.current.strftime("%d-%m-%Y"),
-            
-            "qc_type" => "param",
-            "custom_qc" => custom_qc_items
-          }
-        ],
-        "pickup_location" => {
-          "name" => stock_location.delhivery_warehouse_name
-        }
+      warehouse_payload = {
+        name: name.to_s.truncate(50),
+        registered_name: (registered_name.presence || name).to_s.truncate(50),
+        phone: clean_phone,
+        address: full_addr,
+        city: city.to_s.truncate(50),
+        pin: clean_pin,
+        country: 'India',
+        return_address: (return_address.presence || full_addr).to_s.truncate(200),
+        return_city: (return_city.presence || city).to_s.truncate(50),
+        return_pin: (return_pin.presence || clean_pin),
+        return_country: 'India'
       }
 
-      Rails.logger.info "[Delhivery] RVP Payload: #{payload.to_json}"
-      send_post_form("/api/cmu/create.json", { "format" => "json", "data" => payload.to_json })
-    end
+      active_url = @base_url
+      conn = Faraday.new(url: active_url) do |f|
+        f.request :url_encoded
+        f.adapter Faraday.default_adapter
+        f.headers['Authorization'] = "Token #{@api_token}"
+        f.headers['Content-Type']  = 'application/json'
+        f.headers['Accept']        = 'application/json'
+      end
 
-    # Forward Shipment (Form-urlencoded payload wrapper)
-    def create_shipment(payload_data)
-      send_post_form("/api/cmu/create.json", { "format" => "json", "data" => payload_data.to_json })
-    end
+      response = conn.post('/api/backend/clientwarehouse/create/') do |req|
+        req.body = warehouse_payload.to_json
+      end
 
-    # Fetch Wallet Balance (GET Request)
-    def fetch_balance
-      data = send_get_request("/api/client/get_balance_ledger.json")
-      data.is_a?(Hash) ? data['cash_balance'] : nil
-    rescue => e
-      Rails.logger.error "[Delhivery] Balance Fetch Failed: #{e.message}"
-      nil
-    end
+      if response.status == 401 && active_url != LIVE_URL
+        active_url = LIVE_URL
+        conn = Faraday.new(url: active_url) do |f|
+          f.request :url_encoded
+          f.adapter Faraday.default_adapter
+          f.headers['Authorization'] = "Token #{@api_token}"
+          f.headers['Content-Type']  = 'application/json'
+          f.headers['Accept']        = 'application/json'
+        end
+        response = conn.post('/api/backend/clientwarehouse/create/') do |req|
+          req.body = warehouse_payload.to_json
+        end
+      end
 
-    def track_shipment(waybill)
-      send_get_request("/api/v1/packages/json/", { waybill: waybill })
-    end
-
-    def fetch_label(waybill)
-      send_get_request("/api/p/packing_slip", { wbns: waybill, pdf: 'true' })
-    end
-
-    def create_pickup_request(location_name:, date:, time:, count: 1)
-      payload = { pickup_location: location_name, pickup_date: date, pickup_time: time, expected_package_count: count }
-      send_post_json("/fm/request/new/", payload)
-    end
-
-    def cancel_shipment(waybill)
-      send_post_json("/api/p/edit", { waybill: waybill, cancellation: true })
+      # Returns true if created (201) or already exists (400 / 2000)
+      response.status == 201 || response.body.to_s.include?('already exists')
+    rescue StandardError => e
+      Rails.logger.warn("[Delhivery] Warehouse registration warning for #{name}: #{e.message}")
+      false
     end
 
     private
 
-    def map_mode(val)
-      str = val.to_s.downcase.strip
-      ['express', 'e'].include?(str) ? 'E' : 'S'
-    end
-
-    # Generalized GET Unified Helper
-    def send_get_request(path, params = {})
-      response = @connection.get(path, params, auth_headers)
-      parse_response(response)
-    rescue => e
-      Rails.logger.error "[Delhivery Client] GET Exception on #{path}: #{e.message}"
-      { "error" => "Request Failed", "details" => e.message }
-    end
-
-    # Generalized Form URL Encoded Helper (For Manifest Creations)
-    def send_post_form(path, form_data = {})
-      response = @connection.post(path) do |req|
-        req.headers = auth_headers.merge('Content-Type' => 'application/x-www-form-urlencoded')
-        req.body = URI.encode_www_form(form_data)
+    def connection(url = @base_url)
+      Faraday.new(url: url) do |f|
+        f.request :url_encoded
+        f.adapter Faraday.default_adapter
+        f.headers['Authorization'] = "Token #{@api_token}"
+        f.headers['Accept']        = 'application/json'
       end
-      parse_response(response)
-    rescue => e
-      Rails.logger.error "[Delhivery Client] Form POST Exception on #{path}: #{e.message}"
-      { "error" => "Request Failed", "details" => e.message }
     end
 
-    # Generalized Raw JSON POST Helper (For Pickups and Cancellations)
-    def send_post_json(path, body_hash = {})
-      response = @connection.post(path) do |req|
-        req.headers = auth_headers.merge('Content-Type' => 'application/json')
-        req.body = body_hash.to_json
-      end
-      parse_response(response)
-    rescue => e
-      Rails.logger.error "[Delhivery Client] JSON POST Exception on #{path}: #{e.message}"
-      { "error" => "Request Failed", "details" => e.message }
-    end
-
-    # Resilient JSON Parser supporting Delhivery Content-Type fallbacks
-    def parse_response(response)
-      JSON.parse(response.body)
+    def parse_json(str)
+      JSON.parse(str)
     rescue JSON::ParserError
-      { "raw_body" => response.body, "status" => response.status }
-    end
-
-    def auth_headers
-      { "Authorization" => "Token #{@api_token}", "Accept" => "application/json" }
+      {}
     end
   end
 end
