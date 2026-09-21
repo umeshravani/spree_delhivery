@@ -1,4 +1,4 @@
-# Spree Delhivery Integration
+# Spree Delhivery Integration for Spree 5
 
 <img width="300" height="auto" alt="delhivery Header" src="https://github.com/user-attachments/assets/c3fb2919-a732-4719-905a-54d202380703" /><br>
 
