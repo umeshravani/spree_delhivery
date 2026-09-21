@@ -4,8 +4,8 @@ Gem::Specification.new do |s|
   s.platform    = Gem::Platform::RUBY
   s.name        = 'spree_delhivery'
   s.version     = '6.0.0'
-  s.authors     = ['Spree Commerce']
-  s.email       = 'hello@spreecommerce.org'
+  s.authors     = ['Umesh Ravani']
+  s.email       = 'umeshravani98@gmail.com '
   s.summary     = 'Delhivery Fulfillment and Shipping Provider for Spree Commerce'
   s.description = 'Delhivery shipping rates, labels, and tracking for Spree 6'
   s.homepage    = 'https://spreecommerce.org'
