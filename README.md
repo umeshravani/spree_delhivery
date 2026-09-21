@@ -1,3 +1,5 @@
+<img width="300" height="auto" alt="delhivery Header" src="https://github.com/user-attachments/assets/c3fb2919-a732-4719-905a-54d202380703" /><br>
+
 # Spree Delhivery (Spree 6 / Next.js Storefront)
 
 This plugin integrates **Delhivery** with Spree 6 for automated shipping rate calculations, multi-vendor marketplace fulfillment, and a dynamic **Cash on Delivery (COD) Surcharge** that works seamlessly with the official Spree 6 Next.js Storefront.
@@ -18,6 +20,12 @@ This plugin integrates **Delhivery** with Spree 6 for automated shipping rate ca
   - Preserved on the order through `Spree::Carts::Complete` into order totals, fees, and customer invoices.
 
 ---
+
+## Screenshots
+<img width="1369" height="969" alt="Delhivery Integration Spree 6" src="https://github.com/user-attachments/assets/b2d9b730-14ab-4ea9-95b7-55382c3dfe13" />
+<img width="728" height="968" alt="Delhivery Configuration Spree 6" src="https://github.com/user-attachments/assets/cf02cb60-0bb5-408e-95be-9d9d244ca9cb" />
+<img width="1369" height="845" alt="Delhivery Profiles Spree 6" src="https://github.com/user-attachments/assets/b1b3f8b4-29b6-4cb0-8c1d-3f4e293c617e" />
+<img width="1202" height="1004" alt="Delhivery Checkout Page Spree 6" src="https://github.com/user-attachments/assets/315b41c9-962e-4bc6-a2fc-e230c7e55d1a" />
 
 ## Backend Installation & Setup
 
@@ -223,3 +231,8 @@ Update `handleMethodSelect` so selecting COD triggers `createDirectPayment` and 
    - `PaymentSessionsControllerDecorator`: When `POST /api/v3/store/carts/:id/payment_sessions` initiates a prepaid gateway session, it invalidates any COD checkout payment and recalculates `@cart.recalculate_totals!` to immediately strip the COD surcharge.
 4. **Order Placement (`Spree::Carts::Complete`)**:
    During order completion, `copy_typed_lines!` copies the `Spree::Fee` from `cart` to `order`, guaranteeing that totals and fees match exactly across both the customer invoice and Admin order management.
+
+
+ ## 🤝 Contributing
+ 
+   Bug reports and pull requests are welcome on GitHub. This project is intended to be a safe, welcoming space for collaboration.
