@@ -232,6 +232,12 @@ Update `handleMethodSelect` so selecting COD triggers `createDirectPayment` and 
 4. **Order Placement (`Spree::Carts::Complete`)**:
    During order completion, `copy_typed_lines!` copies the `Spree::Fee` from `cart` to `order`, guaranteeing that totals and fees match exactly across both the customer invoice and Admin order management.
 
+ ## Order Status & Tracking Page
+ Check out [Implementation of Order Tracking in Spree 6](/Implementation-Order-Tracking-Docs.md)
+ 
+ ### Order Live Status Breakdown
+ <img width="729" height="876" alt="Order Status Delhivery" src="https://github.com/user-attachments/assets/ecd72316-705a-41b5-bbca-f59bc5d01764" />
+
 
  ## 🤝 Contributing
  
