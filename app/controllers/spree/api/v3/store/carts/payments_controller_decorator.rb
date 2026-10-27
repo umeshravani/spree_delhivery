@@ -7,12 +7,13 @@ module Spree
         module Carts
           module PaymentsControllerDecorator
             def create
-              payment_method = current_store.payment_methods.find_by_prefix_id!(params[:payment_method_id])
+              payment_method = current_store.payment_methods.active.storefront_visible.
+                               find_by_prefix_id!(params[:payment_method_id])
 
               if payment_method.session_required?
                 return render_error(
                   code: 'payment_session_required',
-                  message: Spree.t('api.v3.payments.session_required'),
+                  message: I18n.t('spree.api.v3.payments.session_required'),
                   status: :unprocessable_content
                 )
               end
@@ -20,7 +21,7 @@ module Spree
               unless payment_method.available_for_order?(@cart)
                 return render_error(
                   code: 'payment_method_unavailable',
-                  message: Spree.t('api.v3.payments.method_unavailable'),
+                  message: I18n.t('spree.api.v3.payments.method_unavailable'),
                   status: :unprocessable_content
                 )
               end
@@ -40,7 +41,7 @@ module Spree
 
               if @payment.save
                 # Invalidate any other checkout payments
-                @cart.payments.with_state('checkout').where.not(id: @payment.id).each do |p|
+                @cart.payments.where(status: 'checkout').where.not(id: @payment.id).each do |p|
                   p.invalidate! unless p.store_credit?
                 end
 

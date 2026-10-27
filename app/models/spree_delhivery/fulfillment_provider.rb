@@ -63,19 +63,11 @@ clean_return_phone = stock_location.phone.to_s.gsub(/\D/, '').last(10)
         Rails.logger.warn("[Delhivery] Auto-registration of warehouse #{stock_location.name} failed: #{e.message}")
       end
 
-      # 2. Convert Weight to Grams
-      weight_in_grams = Spree::Measurement.convert_weight(
-        package.weight,
-        from: (owner.store&.preferred_weight_unit || 'lb'),
-        to: 'g'
-      ).to_f.round(2)
-      weight_in_grams = [weight_in_grams, 50.0].max.to_i
+      # 2. Convert Weight to Grams (Accurately converts from variant's UOM: g, kg, lb, oz)
+      weight_in_grams = SpreeDelhivery::MeasurementConverter.package_dead_weight_in_grams(package)
 
-      # 3. Convert Dimensions to Centimeters
-      dim_unit = (owner.store.respond_to?(:preferred_dimension_unit) ? owner.store.preferred_dimension_unit : (owner.store&.metric_unit_system? ? 'cm' : 'in')) || 'cm'
-      max_length = package.contents.map { |item| Spree::Measurement.convert_length(item.variant.depth || 10.0, from: dim_unit, to: 'cm').to_f }.max || 10.0
-      max_width  = package.contents.map { |item| Spree::Measurement.convert_length(item.variant.width || 10.0, from: dim_unit, to: 'cm').to_f }.max || 10.0
-      max_height = package.contents.map { |item| Spree::Measurement.convert_length(item.variant.height || 10.0, from: dim_unit, to: 'cm').to_f }.max || 10.0
+      # 3. Convert Dimensions to Centimeters (Accurately converts from variant's UOM: mm, cm, m, in, ft)
+      shipment_length, shipment_width, shipment_height = SpreeDelhivery::MeasurementConverter.package_dimensions_in_cm(package)
 
       # 4. Improve Product Description for Packing Slip
       line_items_desc = package.contents.map { |item| "#{item.variant.name} (Qty: #{item.quantity}, Unit Price: #{item.price})" }.join(', ').truncate(250)
@@ -108,9 +100,9 @@ clean_return_phone = stock_location.phone.to_s.gsub(/\D/, '').last(10)
         quantity: package.contents.sum(&:quantity),
         waybill: '',
         weight: weight_in_grams,
-        shipment_length: max_length.ceil,
-        shipment_width: max_width.ceil,
-        shipment_height: max_height.ceil,
+        shipment_length: shipment_length,
+        shipment_width: shipment_width,
+        shipment_height: shipment_height,
         shipping_mode: shipping_mode
       }
 

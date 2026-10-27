@@ -5,7 +5,7 @@ Gem::Specification.new do |s|
   s.name        = 'spree_delhivery'
   s.version     = '6.0.0'
   s.authors     = ['Umesh Ravani']
-  s.email       = 'umeshravani98@gmail.com '
+  s.email       = 'umeshravani98@gmail.com'
   s.summary     = 'Delhivery Fulfillment and Shipping Provider for Spree Commerce'
   s.description = 'Delhivery shipping rates, labels, and tracking for Spree 6'
   s.homepage    = 'https://spreecommerce.org'
@@ -16,7 +16,7 @@ Gem::Specification.new do |s|
   s.files        = Dir["{app,config,db,lib,vendor}/**/*", "Rakefile", "LICENSE", "README.md"].reject { |f| f.match(/^spec/) && !f.match(/^spec\/fixtures/) }
   s.require_path = 'lib'
 
-  s.add_dependency 'spree_core', '>= 6.0.0.beta1'
+  s.add_dependency 'spree_core', '>= 6.0.0'
   s.add_dependency 'faraday', '~> 2.0'
 
 end

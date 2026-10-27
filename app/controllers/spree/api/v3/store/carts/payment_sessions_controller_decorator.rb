@@ -8,10 +8,19 @@ module Spree
           module PaymentSessionsControllerDecorator
             def create
               with_order_lock do
-                payment_method = current_store.payment_methods.find_by_prefix_id!(permitted_params[:payment_method_id])
+                payment_method = current_store.payment_methods.active.storefront_visible.
+                                 find_by_prefix_id!(permitted_params[:payment_method_id])
+
+                unless payment_method.available_for_order?(@cart)
+                  return render_error(
+                    code: 'payment_method_unavailable',
+                    message: I18n.t('spree.api.v3.payments.method_unavailable'),
+                    status: :unprocessable_content
+                  )
+                end
 
                 # Invalidate any checkout direct payments on the cart (such as COD)
-                @cart.payments.with_state('checkout').each do |p|
+                @cart.payments.where(status: 'checkout').each do |p|
                   p.invalidate! unless p.store_credit?
                 end
 

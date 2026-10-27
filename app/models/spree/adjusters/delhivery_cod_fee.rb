@@ -20,11 +20,13 @@ module Spree
 
         if cod_payment
           integration = order.store.integrations.active.find_by(type: 'SpreeDelhivery::Integration')
-          surcharge = integration&.preferred_cod_surcharge.to_f
+          surcharge = integration&.preferred_cod_surcharge.to_d
 
           if surcharge > 0
             fee.kind = 'cod'
             fee.amount = surcharge
+            fee.cart_id = order.id if order.is_a?(Spree::Cart) && fee.respond_to?(:cart_id=)
+            fee.order_id = order.id if order.is_a?(Spree::Order) && fee.respond_to?(:order_id=)
             fee.save! if fee.changed? || fee.new_record?
           else
             fee.destroy! if fee.persisted?

@@ -26,6 +26,10 @@ module SpreeDelhivery
       DELHIVERY_DATA_URI
     end
 
+    def self.docs_url
+      'https://github.com/umeshravani/spree_delhivery/blob/spree-6/README.md'
+    end
+
     def self.description
       'Express parcel delivery, automated AWB generation, and real-time tracking across India.'
     end

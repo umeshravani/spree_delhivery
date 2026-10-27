@@ -3,6 +3,25 @@
 module Spree
   class PaymentMethod < Spree::Base
     class DelhiveryCod < Spree::PaymentMethod
+      self.accepts_money_amounts = true
+
+      DELHIVERY_SVG_PATH = File.expand_path('../../assets/images/spree_delhivery/delhivery-icon.svg', __dir__)
+      DELHIVERY_PNG_PATH = File.expand_path('../../assets/images/spree_delhivery/delhivery-icon.png', __dir__)
+
+      def self.logo_url
+        if File.exist?(DELHIVERY_SVG_PATH)
+          "data:image/svg+xml;base64,#{Base64.strict_encode64(File.read(DELHIVERY_SVG_PATH))}"
+        elsif File.exist?(DELHIVERY_PNG_PATH)
+          "data:image/png;base64,#{Base64.strict_encode64(File.read(DELHIVERY_PNG_PATH))}"
+        else
+          'https://www.delhivery.com/assets/images/logo.png'
+        end
+      end
+
+      def self.docs_url
+        'https://www.delhivery.com'
+      end
+
       def actions
         %w{capture void}
       end

@@ -46,7 +46,7 @@ module SpreeDelhivery
       weight_in_grams = convert_weight(package)
 
       package_store = package.try(:store) || package.try(:owner)&.try(:store) || Spree::Current.store
-      rate_currency = package_store&.default_currency || 'INR'
+      rate_currency = package.try(:currency) || package.try(:owner)&.try(:currency) || package.try(:order)&.try(:currency) || package_store&.default_currency || 'INR'
 
       rates = []
 
@@ -64,7 +64,7 @@ module SpreeDelhivery
           carrier: 'Delhivery',
           service_level: 'Express',
           name: 'Delhivery Express (Air)',
-          cost: express_cost,
+          cost: express_cost.to_d,
           currency: rate_currency,
           metadata: { 'delhivery_mode' => 'Express', 'payment_type' => 'Pre-paid' }
         )
@@ -84,7 +84,7 @@ module SpreeDelhivery
           carrier: 'Delhivery',
           service_level: 'Surface',
           name: 'Delhivery Surface',
-          cost: surface_cost,
+          cost: surface_cost.to_d,
           currency: rate_currency,
           metadata: { 'delhivery_mode' => 'Surface', 'payment_type' => 'Pre-paid' }
         )
@@ -111,23 +111,10 @@ module SpreeDelhivery
     end
 
     def convert_weight(package)
-      raw_weight = begin
-        package.weight
-      rescue StandardError
-        0.5
-      end
-      raw_weight = 0.5 if raw_weight.nil? || raw_weight.to_f.zero?
-
-      store_unit = package.try(:owner)&.try(:store)&.preferred_weight_unit rescue 'lb'
-      store_unit ||= 'lb'
-
-      converted = begin
-        Spree::Measurement.convert_weight(raw_weight, from: store_unit, to: 'g').to_f.round(2)
-      rescue StandardError
-        (raw_weight.to_f * 453.592).round(2)
-      end
-
-      [converted, 50.0].max
+      SpreeDelhivery::MeasurementConverter.chargeable_weight_in_grams(package)
+    rescue StandardError => e
+      Rails.logger.warn("[Delhivery] Error calculating chargeable weight: #{e.message}")
+      500
     end
 
   end
