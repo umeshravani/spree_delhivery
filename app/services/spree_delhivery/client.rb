@@ -43,6 +43,30 @@ module SpreeDelhivery
       serviceability(pin: pincode)
     end
 
+    def cod_serviceable?(pin:)
+      response = connection.get('/c/api/pin-codes/json/') do |req|
+        req.params['filter_codes'] = pin.to_s.strip
+      end
+
+      if response.status == 401 && @base_url != LIVE_URL
+        response = connection(LIVE_URL).get('/c/api/pin-codes/json/') do |req|
+          req.params['filter_codes'] = pin.to_s.strip
+        end
+      end
+
+      return false unless response.success?
+
+      data = parse_json(response.body)
+      codes = data['delivery_codes'] || []
+      match = codes.find { |c| c.dig('postal_code', 'pin').to_s == pin.to_s.strip }
+      return false if match.nil?
+
+      match.dig('postal_code', 'cod') == 'Y' || match.dig('postal_code', 'cash') == 'Y'
+    rescue StandardError => e
+      Rails.logger.error("[Delhivery] COD serviceability error: #{e.message}")
+      false
+    end
+
     # --- 2. Live Dynamic Rate Calculation (Kinko API) ---
     def calculate_rate(origin_pin:, destination_pin:, weight_in_grams:, mode: 'E', payment_type: 'Pre-paid')
       response = connection.get('/api/kinko/v1/invoice/charges.json') do |req|
@@ -128,7 +152,7 @@ module SpreeDelhivery
       response = connection.get('/api/p/packing_slip') do |req|
         req.params['wbns']     = waybill.to_s.strip
         req.params['pdf']      = 'true'
-        req.params['pdf_size'] = '4R' # 4x6 standard format that fits edge-to-edge
+        req.params['pdf_size'] = '4R' # 4x6 standard format
       end
 
       if response.status == 401 && @base_url != LIVE_URL
@@ -220,7 +244,6 @@ module SpreeDelhivery
         end
       end
 
-      # Returns true if created (201) or already exists (400 / 2000)
       response.status == 201 || response.body.to_s.include?('already exists')
     rescue StandardError => e
       Rails.logger.warn("[Delhivery] Warehouse registration warning for #{name}: #{e.message}")
@@ -239,7 +262,7 @@ module SpreeDelhivery
     end
 
     def parse_json(str)
-      JSON.parse(str)
+      JSON.parse(str.to_s)
     rescue JSON::ParserError
       {}
     end
