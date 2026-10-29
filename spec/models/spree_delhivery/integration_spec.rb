@@ -4,49 +4,6 @@ require 'spec_helper'
 require 'ostruct'
 require 'json'
 
-# Load extension files
-require_relative '../../app/services/spree_delhivery/client'
-require_relative '../../app/models/spree_delhivery/measurement_converter'
-require_relative '../../app/models/spree_delhivery/tracker_event'
-
-module Spree
-  class Integration
-    def self.preference(name, type, options = {}); end
-    def self.validates(*args); end
-  end
-
-  module DeliveryRateProvider
-    class Base
-      def current_integration(package); nil; end
-    end
-    class Estimate
-      attr_reader :carrier, :service_level, :name, :cost, :currency, :metadata
-      def initialize(attrs = {})
-        attrs.each { |k, v| instance_variable_set("@#{k}", v) }
-      end
-    end
-  end
-
-  module FulfillmentProvider
-    class Base; end
-  end
-
-  class LabelPurchase
-    attr_reader :external_id, :carrier, :service, :tracking_number, :tracking_url, :cost, :currency, :format, :file_url, :metadata
-    def initialize(attrs = {})
-      attrs.each { |k, v| instance_variable_set("@#{k}", v) }
-    end
-  end
-
-  module Core
-    class LabelPurchaseRefused < StandardError; end
-  end
-end
-
-require_relative '../../app/models/spree_delhivery/integration'
-require_relative '../../app/models/spree_delhivery/delivery_rate_provider'
-require_relative '../../app/models/spree_delhivery/fulfillment_provider'
-
 RSpec.describe SpreeDelhivery do
   let(:client) { SpreeDelhivery::Client.new(api_token: 'test_token_123', test_mode: true) }
 
@@ -110,7 +67,7 @@ RSpec.describe SpreeDelhivery do
     describe '#cancel_shipment' do
       it 'posts cancellation payload and returns boolean' do
         fake_conn = double('FaradayConnection')
-        fake_response = double('FaradayResponse', success?: true)
+        fake_response = double('FaradayResponse', success?: true, status: 200)
         allow(fake_conn).to receive(:post).with('/api/p/edit').and_return(fake_response)
         allow(client).to receive(:connection).and_return(fake_conn)
 
