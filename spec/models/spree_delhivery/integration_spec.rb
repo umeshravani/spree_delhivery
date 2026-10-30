@@ -262,5 +262,35 @@ RSpec.describe SpreeDelhivery do
       expect(label.tracking_number).to eq('DELH_RECOVERED_100')
       expect(label.file_url).to eq('https://delhivery.com/recovered.pdf')
     end
+
+    it 'pauses automatic rebooking and flags requires_reconciliation when timeout occurs and carrier has not confirmed' do
+      integration = double('Integration', client: client)
+      allow(provider).to receive(:integration_for).and_return(integration)
+
+      owner = double(
+        'Fulfillment',
+        is_a?: false,
+        id: 102,
+        number: 'F102',
+        tracking_number: nil,
+        shipping_label: nil,
+        selected_delivery_rate: double('Rate', service_level: 'Express', cost: 120.0),
+        store: double('Store', default_currency: 'INR'),
+        order: double('Order', number: 'R10200'),
+        metadata: { 'delhivery_booking_state' => 'requires_reconciliation' },
+        persisted?: false
+      )
+      allow(owner).to receive(:metadata=)
+
+      # Carrier tracking returns nil (unindexed or unbooked)
+      allow(client).to receive(:find_shipment_by_ref).with(ref_id: 'R10200-F102').and_return(nil)
+
+      # Must NEVER call create_shipment blindly
+      expect(client).not_to receive(:create_shipment)
+
+      expect {
+        provider.purchase_label(owner)
+      }.to raise_error(Spree::Core::LabelPurchaseRefused, /Automatic rebooking is paused/)
+    end
   end
 end

@@ -35,6 +35,8 @@ module SpreeDelhivery
       # 2. Concurrency Control & Local Persistent Coordination:
       # Use database row-level locking on owner (if persisted and supports with_lock)
       # to prevent simultaneous requests from entering the booking block.
+      needs_reconciliation = false
+
       acquire_booking_lock(owner) do |locked_owner|
         # Re-check inside lock after reload
         current_waybill = resolve_existing_waybill(locked_owner)
@@ -53,6 +55,12 @@ module SpreeDelhivery
           raise Spree::Core::LabelPurchaseRefused, 'A Delhivery shipment booking is currently in progress for this fulfillment. Please wait a moment.'
         end
 
+        # If previous booking state was requires_reconciliation or an expired in_progress (e.g. worker crashed)
+        if state == 'requires_reconciliation' || (state == 'in_progress' && (started_at.nil? || started_at <= 45.seconds.ago))
+          needs_reconciliation = true
+          next
+        end
+
         # Mark in progress persistently
         record_booking_in_progress(locked_owner, ref: order_ref)
       end
@@ -62,9 +70,21 @@ module SpreeDelhivery
         return build_label_purchase(owner, integration, service_level, existing_waybill)
       end
 
-      # 3. Pre-booking Carrier Idempotency Check:
-      # Query Delhivery to check whether a package was already registered for this order reference.
-      # This handles retries where a previous attempt was cut off by an ambiguous network timeout.
+      # 3. Pre-booking Carrier Reconciliation & Idempotency Check:
+      # If previous attempt timed out or crashed, prevent automatic rebooking until carrier confirms package status.
+      if needs_reconciliation
+        existing_booking = integration.client.find_shipment_by_ref(ref_id: order_ref) rescue nil
+        if existing_booking.present? && existing_booking[:waybill].present?
+          waybill = existing_booking[:waybill]
+          finalize_booking(owner, waybill: waybill, ref_id: order_ref)
+          return build_label_purchase(owner, integration, service_level, waybill)
+        else
+          record_booking_ambiguous(owner, ref: order_ref)
+          raise Spree::Core::LabelPurchaseRefused, "Shipment booking outcome for #{order_ref} is ambiguous following a prior timeout or crash. Automatic rebooking is paused to prevent duplicate carrier manifests. Please verify reference '#{order_ref}' in Delhivery portal (https://one.delhivery.com) or retry once tracking updates."
+        end
+      end
+
+      # Pre-booking check for normal retries
       existing_booking = integration.client.find_shipment_by_ref(ref_id: order_ref) rescue nil
       if existing_booking.present? && existing_booking[:waybill].present?
         waybill = existing_booking[:waybill]
@@ -172,9 +192,10 @@ module SpreeDelhivery
         if reconciled.present? && reconciled[:waybill].present?
           waybill = reconciled[:waybill]
         else
-          clear_booking_in_progress(owner)
+          # Mark state as requires_reconciliation to prevent automatic duplicate rebooking
+          record_booking_ambiguous(owner, ref: order_ref)
           Rails.error.report(e, context: { subject_id: owner.id, ref_id: order_ref }, source: 'spree_delhivery.fulfillment')
-          raise Spree::Core::LabelPurchaseRefused, "Delhivery shipment error: #{e.message}"
+          raise Spree::Core::LabelPurchaseRefused, "Delhivery shipment error: #{e.message}. State marked as requires_reconciliation to pause automatic rebooking."
         end
       end
 
@@ -250,6 +271,20 @@ module SpreeDelhivery
       return unless owner.respond_to?(:metadata)
       current_meta = owner.metadata.is_a?(Hash) ? owner.metadata.dup : {}
       current_meta.delete('delhivery_booking_state')
+      current_meta.delete('delhivery_booking_started_at')
+      if owner.respond_to?(:update_column) && owner.persisted?
+        owner.update_column(:metadata, current_meta)
+      elsif owner.respond_to?(:metadata=)
+        owner.metadata = current_meta
+      end
+    end
+
+    def record_booking_ambiguous(owner, ref:)
+      return unless owner.respond_to?(:metadata)
+      current_meta = owner.metadata.is_a?(Hash) ? owner.metadata.dup : {}
+      current_meta['delhivery_booking_state'] = 'requires_reconciliation'
+      current_meta['delhivery_booking_ambiguous_at'] = Time.current.iso8601
+      current_meta['delhivery_booking_ref'] = ref
       current_meta.delete('delhivery_booking_started_at')
       if owner.respond_to?(:update_column) && owner.persisted?
         owner.update_column(:metadata, current_meta)
