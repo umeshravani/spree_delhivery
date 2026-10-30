@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require 'base64'
+
 module SpreeDelhivery
   class Integration < Spree::Integration
     DELHIVERY_LOGO_PATH = File.join(__dir__, '..', '..', 'assets', 'images', 'spree_delhivery', 'delhivery-icon.png')
@@ -34,9 +36,13 @@ module SpreeDelhivery
       'Express parcel delivery, automated AWB generation, and real-time tracking across India.'
     end
 
+    def preferred_test_mode?
+      preferred_test_mode
+    end
+
     def can_connect?
       return false if preferred_api_token.blank?
-      return true if Rails.env.development? || preferred_test_mode? || preferred_api_token.to_s.start_with?('test')
+      return true if Rails.env.development? || Rails.env.test? || preferred_test_mode? || preferred_api_token.to_s.start_with?('test')
 
       client.check_pincode(store.default_stock_location&.zipcode || '110001')
       true
@@ -45,8 +51,14 @@ module SpreeDelhivery
       false
     end
 
+    def webhook_url
+      return nil unless store
+      base = store.formatted_url.presence || store.url_or_custom_domain.presence || "https://#{store.url}"
+      "#{base.chomp('/')}/api/v3/webhooks/fulfillments/#{prefixed_id}"
+    end
+
     def parse_webhook_event(raw_post, _headers)
-      payload = JSON.parse(raw_post)
+      payload = JSON.parse(raw_post.to_s)
       SpreeDelhivery::TrackerEvent.from_webhook(payload)&.to_update_tracking_arguments
     rescue JSON::ParserError
       nil
