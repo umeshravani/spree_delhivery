@@ -22,8 +22,8 @@ Before installing, ensure your environment meets the minimum version requirement
 If you created your store using the standard Spree starter or CLI (`@spree/cli`):
 
 ```bash
-# 1. Add gem to server/Gemfile
-pnpm spree bundle add spree_delhivery --github "umeshravani/spree_delhivery" --branch "spree-6"
+# 1. Add gem to server/Gemfile (defaults to main for Spree 6)
+pnpm spree bundle add spree_delhivery --github "umeshravani/spree_delhivery"
 
 # 2. Run the installation generator
 pnpm spree rails g spree_delhivery:install
@@ -40,7 +40,7 @@ If you are running Rails directly on your host or in a custom container:
 
 ```bash
 # 1. Add gem to your Gemfile
-bundle add spree_delhivery --github "umeshravani/spree_delhivery" --branch "spree-6"
+bundle add spree_delhivery --github "umeshravani/spree_delhivery"
 
 # 2. Run the installation generator
 bin/rails g spree_delhivery:install
@@ -55,9 +55,13 @@ bin/rails restart
 
 For containerized production environments:
 
-1. Add the pinned gem to `server/Gemfile`:
+1. Add the gem to `server/Gemfile`:
    ```ruby
-   gem 'spree_delhivery', github: 'umeshravani/spree_delhivery', branch: 'spree-6'
+   # Spree 6 (Recommended):
+   gem 'spree_delhivery', github: 'umeshravani/spree_delhivery', branch: 'main'
+
+   # Or pinned to an immutable release SHA:
+   # gem 'spree_delhivery', github: 'umeshravani/spree_delhivery', ref: 'f44dacfdb6ce6c61d68a48adee93182b10b84e3a'
    ```
 
 2. Run `bundle lock` inside the build context to update `server/Gemfile.lock`:
@@ -89,15 +93,27 @@ For containerized production environments:
 To install both in a single step:
 
 ```bash
-# Add both gems
-pnpm spree bundle add spree_delhivery --github "umeshravani/spree_delhivery" --branch "spree-6"
-pnpm spree bundle add spree_razorpay --github "umeshravani/spree_razorpay" --branch "spree-6"
+# Add both gems (defaults to main for Spree 6)
+pnpm spree bundle add spree_delhivery --github "umeshravani/spree_delhivery"
+pnpm spree bundle add spree_razorpay --github "umeshravani/spree_razorpay"
 
 # Run both generators
 pnpm spree rails g spree_delhivery:install
 pnpm spree rails g spree_razorpay:install
 
 # Restart services
+pnpm spree restart
+```
+
+---
+
+### Legacy Spree 5 Support
+
+For legacy stores running Spree Commerce 5.x, reference the preserved `spree-5` branch:
+
+```ruby
+gem 'spree_delhivery', github: 'umeshravani/spree_delhivery', branch: 'spree-5'
+```
 pnpm spree restart
 ```
 

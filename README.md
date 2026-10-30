@@ -49,8 +49,8 @@ Provides real-time shipping rate calculation, automated AWB generation, multi-ve
 ### Method 1: Spree CLI (Docker Starter Projects — Recommended)
 
 ```bash
-# 1. Add to server/Gemfile
-pnpm spree bundle add spree_delhivery --github "umeshravani/spree_delhivery" --branch "spree-6"
+# 1. Add to server/Gemfile (defaults to main for Spree 6)
+pnpm spree bundle add spree_delhivery --github "umeshravani/spree_delhivery"
 
 # 2. Run the installation generator
 pnpm spree rails g spree_delhivery:install
@@ -63,7 +63,7 @@ pnpm spree restart
 
 ```bash
 # 1. Add to Gemfile
-bundle add spree_delhivery --github "umeshravani/spree_delhivery" --branch "spree-6"
+bundle add spree_delhivery --github "umeshravani/spree_delhivery"
 
 # 2. Run the installation generator
 bin/rails g spree_delhivery:install
@@ -75,9 +75,13 @@ bin/rails restart
 ### Method 3: Production Docker / Coolify Deployment
 
 In containerized deployments:
-1. Add the pinned gem to `server/Gemfile`:
+1. Add the gem to `server/Gemfile`:
    ```ruby
-   gem 'spree_delhivery', github: 'umeshravani/spree_delhivery', branch: 'spree-6'
+   # Spree 6:
+   gem 'spree_delhivery', github: 'umeshravani/spree_delhivery', branch: 'main'
+
+   # Legacy Spree 5:
+   # gem 'spree_delhivery', github: 'umeshravani/spree_delhivery', branch: 'spree-5'
    ```
 2. Lock dependencies: `pnpm spree bundle lock`
 3. Set environment variables in Coolify / Docker Compose (`DELHIVERY_API_TOKEN`, `DELHIVERY_PICKUP_LOCATION_NAME`, `DELHIVERY_CLIENT_NAME`, `DELHIVERY_TEST_MODE`, `DELHIVERY_COD_SURCHARGE`).
