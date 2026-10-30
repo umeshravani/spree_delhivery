@@ -74,6 +74,53 @@ RSpec.describe SpreeDelhivery do
         expect(client.cancel_shipment(waybill: '1234567890')).to be true
       end
     end
+
+    describe '#find_shipment_by_ref' do
+      it 'queries packages API with ref_ids and extracts active waybill' do
+        response_body = {
+          'ShipmentData' => [
+            {
+              'Shipment' => {
+                'AWB' => 'DELH_REF_AWB_101',
+                'RefNo' => 'ORD-12345',
+                'Status' => { 'Status' => 'In Transit' }
+              }
+            }
+          ]
+        }.to_json
+
+        fake_conn = double('FaradayConnection')
+        fake_response = double('FaradayResponse', success?: true, status: 200, body: response_body)
+        allow(fake_conn).to receive(:get).with('/api/v1/packages/json/').and_return(fake_response)
+        allow(client).to receive(:connection).and_return(fake_conn)
+
+        result = client.find_shipment_by_ref(ref_id: 'ORD-12345')
+        expect(result).not_to be_nil
+        expect(result[:waybill]).to eq('DELH_REF_AWB_101')
+        expect(result[:status]).to eq('In Transit')
+      end
+
+      it 'returns nil if shipment is cancelled or not found' do
+        response_body = {
+          'ShipmentData' => [
+            {
+              'Shipment' => {
+                'AWB' => 'DELH_CANCELLED_AWB',
+                'RefNo' => 'ORD-12345',
+                'Status' => { 'Status' => 'Cancelled' }
+              }
+            }
+          ]
+        }.to_json
+
+        fake_conn = double('FaradayConnection')
+        fake_response = double('FaradayResponse', success?: true, status: 200, body: response_body)
+        allow(fake_conn).to receive(:get).with('/api/v1/packages/json/').and_return(fake_response)
+        allow(client).to receive(:connection).and_return(fake_conn)
+
+        expect(client.find_shipment_by_ref(ref_id: 'ORD-12345')).to be_nil
+      end
+    end
   end
 
   describe SpreeDelhivery::TrackerEvent do
@@ -153,6 +200,67 @@ RSpec.describe SpreeDelhivery do
       label = provider.purchase_label(owner)
       expect(label.tracking_number).to eq('DELH_EXISTING_999')
       expect(label.file_url).to eq('https://delhivery.com/label.pdf')
+    end
+
+    it 'rejects concurrent booking attempts when booking is already in progress' do
+      integration = double('Integration', client: client)
+      allow(provider).to receive(:integration_for).and_return(integration)
+
+      owner = double(
+        'Fulfillment',
+        is_a?: false,
+        id: 99,
+        number: 'F99',
+        tracking_number: nil,
+        shipping_label: nil,
+        selected_delivery_rate: double('Rate', service_level: 'Express', cost: 120.0),
+        store: double('Store', default_currency: 'INR'),
+        order: double('Order', number: 'R99999'),
+        metadata: {
+          'delhivery_booking_state' => 'in_progress',
+          'delhivery_booking_started_at' => Time.current.iso8601
+        },
+        persisted?: false
+      )
+
+      expect {
+        provider.purchase_label(owner)
+      }.to raise_error(Spree::Core::LabelPurchaseRefused, /Delhivery shipment booking is currently in progress/)
+    end
+
+    it 'reconciles existing waybill from Delhivery without re-calling create_shipment on retry' do
+      integration = double('Integration', client: client)
+      allow(provider).to receive(:integration_for).and_return(integration)
+
+      owner = double(
+        'Fulfillment',
+        is_a?: false,
+        id: 100,
+        number: 'F100',
+        tracking_number: nil,
+        shipping_label: nil,
+        selected_delivery_rate: double('Rate', service_level: 'Express', cost: 120.0),
+        store: double('Store', default_currency: 'INR'),
+        order: double('Order', number: 'R10000'),
+        metadata: {},
+        persisted?: false
+      )
+      allow(owner).to receive(:metadata=)
+
+      # Delhivery package lookup finds the existing waybill
+      allow(client).to receive(:find_shipment_by_ref).with(ref_id: 'R10000-F100').and_return({
+        waybill: 'DELH_RECOVERED_100',
+        ref_id: 'R10000-F100',
+        status: 'Manifested'
+      })
+      allow(client).to receive(:fetch_packing_slip_url).with(waybill: 'DELH_RECOVERED_100').and_return('https://delhivery.com/recovered.pdf')
+
+      # Must NOT call create_shipment!
+      expect(client).not_to receive(:create_shipment)
+
+      label = provider.purchase_label(owner)
+      expect(label.tracking_number).to eq('DELH_RECOVERED_100')
+      expect(label.file_url).to eq('https://delhivery.com/recovered.pdf')
     end
   end
 end

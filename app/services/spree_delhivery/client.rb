@@ -250,6 +250,45 @@ module SpreeDelhivery
       false
     end
 
+    # --- 7. Package / Shipment Lookup by Order Reference ---
+    def find_shipment_by_ref(ref_id:)
+      return nil if ref_id.blank?
+
+      response = connection.get('/api/v1/packages/json/') do |req|
+        req.params['ref_ids'] = ref_id.to_s.strip
+      end
+
+      if response.status == 401 && @base_url != LIVE_URL
+        response = connection(LIVE_URL).get('/api/v1/packages/json/') do |req|
+          req.params['ref_ids'] = ref_id.to_s.strip
+        end
+      end
+
+      return nil unless response.success?
+
+      data = parse_json(response.body)
+      shipment_data = data['ShipmentData']
+      return nil if shipment_data.blank? || !shipment_data.is_a?(Array)
+
+      # Match active package not cancelled
+      active_pkg = shipment_data.map { |d| d['Shipment'] }.compact.find do |pkg|
+        pkg_status = pkg.dig('Status', 'Status').to_s.downcase
+        pkg['AWB'].present? && pkg_status != 'cancelled' && pkg_status != 'canceled'
+      end
+
+      return nil if active_pkg.nil?
+
+      {
+        waybill: active_pkg['AWB'],
+        ref_id: active_pkg['RefNo'] || ref_id,
+        status: active_pkg.dig('Status', 'Status'),
+        raw: active_pkg
+      }
+    rescue StandardError => e
+      Rails.logger.warn("[Delhivery] Shipment lookup error for ref #{ref_id}: #{e.message}")
+      nil
+    end
+
     private
 
     def connection(url = @base_url)

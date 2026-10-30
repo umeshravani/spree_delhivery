@@ -24,22 +24,52 @@ module SpreeDelhivery
       service_level = owner.selected_delivery_rate&.service_level || 'Express'
       shipping_mode = service_level == 'Surface' ? 'Surface' : 'Express'
 
-      # Idempotency guard: if a label or tracking number already exists, do not book a duplicate shipment
-      existing_waybill = owner.tracking_number.presence || (owner.respond_to?(:shipping_label) ? owner.shipping_label&.tracking_number : nil)
+      # 1. Immediate idempotency guard: if a label or tracking number already exists, return it
+      existing_waybill = resolve_existing_waybill(owner)
       if existing_waybill.present?
-        pdf_url = integration.client.fetch_packing_slip_url(waybill: existing_waybill)
-        return Spree::LabelPurchase.new(
-          external_id: existing_waybill,
-          carrier: 'Delhivery',
-          service: service_level,
-          tracking_number: existing_waybill,
-          tracking_url: "https://www.delhivery.com/track/package/#{existing_waybill}",
-          cost: owner.selected_delivery_rate&.cost || 0.0,
-          currency: owner.store.default_currency || 'INR',
-          format: 'pdf',
-          file_url: pdf_url,
-          metadata: { 'delhivery_waybill' => existing_waybill }
-        )
+        return build_label_purchase(owner, integration, service_level, existing_waybill)
+      end
+
+      order_ref = order_reference_for(owner, order)
+
+      # 2. Concurrency Control & Local Persistent Coordination:
+      # Use database row-level locking on owner (if persisted and supports with_lock)
+      # to prevent simultaneous requests from entering the booking block.
+      acquire_booking_lock(owner) do |locked_owner|
+        # Re-check inside lock after reload
+        current_waybill = resolve_existing_waybill(locked_owner)
+        if current_waybill.present?
+          existing_waybill = current_waybill
+          next
+        end
+
+        metadata = locked_owner.respond_to?(:metadata) && locked_owner.metadata.is_a?(Hash) ? locked_owner.metadata : {}
+        state = metadata['delhivery_booking_state']
+        started_at_str = metadata['delhivery_booking_started_at']
+        started_at = started_at_str.present? ? (Time.zone.parse(started_at_str) rescue nil) : nil
+
+        # If a booking is currently in progress within the past 45 seconds, reject concurrent call
+        if state == 'in_progress' && started_at.present? && started_at > 45.seconds.ago
+          raise Spree::Core::LabelPurchaseRefused, 'A Delhivery shipment booking is currently in progress for this fulfillment. Please wait a moment.'
+        end
+
+        # Mark in progress persistently
+        record_booking_in_progress(locked_owner, ref: order_ref)
+      end
+
+      # If existing waybill was resolved inside lock, return it immediately
+      if existing_waybill.present?
+        return build_label_purchase(owner, integration, service_level, existing_waybill)
+      end
+
+      # 3. Pre-booking Carrier Idempotency Check:
+      # Query Delhivery to check whether a package was already registered for this order reference.
+      # This handles retries where a previous attempt was cut off by an ambiguous network timeout.
+      existing_booking = integration.client.find_shipment_by_ref(ref_id: order_ref) rescue nil
+      if existing_booking.present? && existing_booking[:waybill].present?
+        waybill = existing_booking[:waybill]
+        finalize_booking(owner, waybill: waybill, ref_id: order_ref)
+        return build_label_purchase(owner, integration, service_level, waybill)
       end
 
       package = owner.to_package
@@ -49,20 +79,20 @@ module SpreeDelhivery
       raise Spree::Core::LabelPurchaseRefused, 'Missing delivery address' if dest_address.blank?
       raise Spree::Core::LabelPurchaseRefused, 'Missing warehouse stock location' if stock_location.blank?
 
-      # 1. Sanitize Phone Numbers to strict 10-digits
+      # Sanitize Phone Numbers to strict 10-digits
       clean_dest_phone = dest_address.phone.to_s.gsub(/\D/, '').last(10)
       clean_return_phone = stock_location.phone.to_s.gsub(/\D/, '').last(10)
 
-      # 1. COD Detection for Orders
+      # COD Detection for Orders
       is_cod = !is_return && order&.payments&.valid&.any? { |p| p.payment_method&.type == 'Spree::PaymentMethod::DelhiveryCod' }
       payment_mode = is_cod ? 'COD' : 'Pre-paid'
       cod_amount = is_cod ? order.total.to_f : 0.0
 
-      # 2. Spree 6 Marketplace Seller Detection
+      # Spree 6 Marketplace Seller Detection
       seller = order.respond_to?(:seller) ? order.seller : nil
       seller_name = seller&.name.presence || owner.store.name
 
-      # 3. Exact Warehouse Matching & Dynamic Auto-Registration
+      # Exact Warehouse Matching & Dynamic Auto-Registration
       pickup_loc_name = stock_location.name
       begin
         warehouse_addr = [stock_location.address1, stock_location.address2].compact_blank.join(', ')
@@ -79,17 +109,13 @@ module SpreeDelhivery
         Rails.logger.warn("[Delhivery] Auto-registration of warehouse #{stock_location.name} failed: #{e.message}")
       end
 
-      # 4. Convert Weight to Grams (Accurately converts from variant's UOM: g, kg, lb, oz)
+      # Weight & Dimension Conversions
       weight_in_grams = SpreeDelhivery::MeasurementConverter.package_dead_weight_in_grams(package)
-
-      # 5. Convert Dimensions to Centimeters (Accurately converts from variant's UOM: mm, cm, m, in, ft)
       shipment_length, shipment_width, shipment_height = SpreeDelhivery::MeasurementConverter.package_dimensions_in_cm(package)
 
-      # 6. Improve Product Description for Packing Slip
       line_items_desc = package.contents.map { |item| "#{item.variant.name} (Qty: #{item.quantity}, Unit Price: #{item.price})" }.join(', ').truncate(250)
       full_dest_address = [dest_address.company, dest_address.address1, dest_address.address2].compact_blank.join(', ')
 
-      # Build the official CMU shipment payload
       shipment_data = {
         name: dest_address.full_name,
         add: full_dest_address,
@@ -98,7 +124,7 @@ module SpreeDelhivery
         state: (dest_address.respond_to?(:state_name_text) ? dest_address.state_name_text : (dest_address.state&.name || dest_address.state_name)),
         country: 'India',
         phone: clean_dest_phone,
-        order: order.number,
+        order: order_ref,
         payment_mode: payment_mode,
         return_pin: stock_location.zipcode.to_s.strip,
         return_city: stock_location.city,
@@ -127,47 +153,33 @@ module SpreeDelhivery
         pickup_location: { name: pickup_loc_name }
       }
 
-      # 7. Book shipment on Delhivery (with resilient fallback to integration default warehouse)
+      # 4. Outbound API Execution with Ambiguous Network Timeout Reconciliation
+      waybill = nil
+      upload_wbn = nil
+      sort_code = nil
+
       begin
-        result = integration.client.create_shipment(payload: payload)
-      rescue Spree::Core::LabelPurchaseRefused => e
-        if e.message.include?('ClientWarehouse matching query does not exist') &&
-           integration.preferred_pickup_location_name.present? &&
-           pickup_loc_name != integration.preferred_pickup_location_name
-          Rails.logger.warn("[Delhivery] Pickup location '#{pickup_loc_name}' not found on Delhivery. Retrying with master location: #{integration.preferred_pickup_location_name}")
-          payload[:pickup_location] = { name: integration.preferred_pickup_location_name }
-          result = integration.client.create_shipment(payload: payload)
+        result = execute_shipment_creation(integration, payload, pickup_loc_name)
+        waybill = result[:waybill]
+        upload_wbn = result[:upload_wbn]
+        sort_code = result[:sort_code]
+      rescue Spree::Core::LabelPurchaseRefused
+        clear_booking_in_progress(owner)
+        raise
+      rescue StandardError => e
+        # Network timeout or communication failure: verify if Delhivery actually created the package
+        reconciled = integration.client.find_shipment_by_ref(ref_id: order_ref) rescue nil
+        if reconciled.present? && reconciled[:waybill].present?
+          waybill = reconciled[:waybill]
         else
-          raise
+          clear_booking_in_progress(owner)
+          Rails.error.report(e, context: { subject_id: owner.id, ref_id: order_ref }, source: 'spree_delhivery.fulfillment')
+          raise Spree::Core::LabelPurchaseRefused, "Delhivery shipment error: #{e.message}"
         end
       end
-      waybill = result[:waybill]
 
-      # 8. Fetch the authentic Delhivery shipping label PDF download URL (4x6 thermal format)
-      pdf_url = integration.client.fetch_packing_slip_url(waybill: waybill)
-
-      # 9. Return Spree::LabelPurchase (Core attaches the PDF via StoreFileJob)
-      Spree::LabelPurchase.new(
-        external_id: waybill,
-        carrier: 'Delhivery',
-        service: service_level,
-        tracking_number: waybill,
-        tracking_url: "https://www.delhivery.com/track/package/#{waybill}",
-        cost: owner.selected_delivery_rate&.cost || 0.0,
-        currency: owner.store.default_currency || 'INR',
-        format: 'pdf',
-        file_url: pdf_url,
-        metadata: {
-          'delhivery_waybill' => waybill,
-          'delhivery_upload_wbn' => result[:upload_wbn],
-          'delhivery_sort_code' => result[:sort_code]
-        }.compact
-      )
-    rescue Spree::Core::LabelPurchaseRefused
-      raise
-    rescue StandardError => e
-      Rails.error.report(e, context: { subject_id: owner.id }, source: 'spree_delhivery.fulfillment')
-      raise Spree::Core::LabelPurchaseRefused, "Delhivery shipment error: #{e.message}"
+      finalize_booking(owner, waybill: waybill, ref_id: order_ref, upload_wbn: upload_wbn, sort_code: sort_code)
+      build_label_purchase(owner, integration, service_level, waybill, upload_wbn: upload_wbn, sort_code: sort_code)
     end
 
     def refund_label(shipping_label)
@@ -188,6 +200,110 @@ module SpreeDelhivery
 
     def documents(_owner)
       []
+    end
+
+    private
+
+    def resolve_existing_waybill(owner)
+      owner.tracking_number.presence ||
+        (owner.respond_to?(:shipping_label) ? owner.shipping_label&.tracking_number.presence : nil) ||
+        (owner.respond_to?(:metadata) && owner.metadata.is_a?(Hash) ? owner.metadata['delhivery_waybill'].presence : nil)
+    end
+
+    def order_reference_for(owner, order)
+      if owner.respond_to?(:number) && owner.number.present? && owner.number != order.number
+        "#{order.number}-#{owner.number}"
+      else
+        order.number
+      end
+    end
+
+    def acquire_booking_lock(owner)
+      if owner.respond_to?(:with_lock) && owner.persisted?
+        owner.with_lock do
+          owner.reload if owner.persisted?
+          yield(owner)
+        end
+      else
+        yield(owner)
+      end
+    end
+
+    def record_booking_in_progress(owner, ref:)
+      return unless owner.respond_to?(:metadata)
+      current_meta = owner.metadata.is_a?(Hash) ? owner.metadata : {}
+      new_meta = current_meta.merge(
+        'delhivery_booking_state' => 'in_progress',
+        'delhivery_booking_started_at' => Time.current.iso8601,
+        'delhivery_booking_ref' => ref
+      )
+      if owner.respond_to?(:update_column) && owner.persisted?
+        owner.update_column(:metadata, new_meta)
+      elsif owner.respond_to?(:metadata=)
+        owner.metadata = new_meta
+      end
+    end
+
+    def clear_booking_in_progress(owner)
+      return unless owner.respond_to?(:metadata)
+      current_meta = owner.metadata.is_a?(Hash) ? owner.metadata.dup : {}
+      current_meta.delete('delhivery_booking_state')
+      current_meta.delete('delhivery_booking_started_at')
+      if owner.respond_to?(:update_column) && owner.persisted?
+        owner.update_column(:metadata, current_meta)
+      elsif owner.respond_to?(:metadata=)
+        owner.metadata = current_meta
+      end
+    end
+
+    def finalize_booking(owner, waybill:, ref_id:, upload_wbn: nil, sort_code: nil)
+      return unless owner.respond_to?(:metadata)
+      current_meta = owner.metadata.is_a?(Hash) ? owner.metadata.dup : {}
+      current_meta.delete('delhivery_booking_state')
+      current_meta.delete('delhivery_booking_started_at')
+      current_meta['delhivery_waybill'] = waybill
+      current_meta['delhivery_booking_ref'] = ref_id
+      current_meta['delhivery_upload_wbn'] = upload_wbn if upload_wbn.present?
+      current_meta['delhivery_sort_code'] = sort_code if sort_code.present?
+      if owner.respond_to?(:update_column) && owner.persisted?
+        owner.update_column(:metadata, current_meta)
+      elsif owner.respond_to?(:metadata=)
+        owner.metadata = current_meta
+      end
+    end
+
+    def build_label_purchase(owner, integration, service_level, waybill, upload_wbn: nil, sort_code: nil)
+      pdf_url = integration.client.fetch_packing_slip_url(waybill: waybill)
+      Spree::LabelPurchase.new(
+        external_id: waybill,
+        carrier: 'Delhivery',
+        service: service_level,
+        tracking_number: waybill,
+        tracking_url: "https://www.delhivery.com/track/package/#{waybill}",
+        cost: owner.selected_delivery_rate&.cost || 0.0,
+        currency: owner.store.default_currency || 'INR',
+        format: 'pdf',
+        file_url: pdf_url,
+        metadata: {
+          'delhivery_waybill' => waybill,
+          'delhivery_upload_wbn' => upload_wbn,
+          'delhivery_sort_code' => sort_code
+        }.compact
+      )
+    end
+
+    def execute_shipment_creation(integration, payload, pickup_loc_name)
+      integration.client.create_shipment(payload: payload)
+    rescue Spree::Core::LabelPurchaseRefused => e
+      if e.message.include?('ClientWarehouse matching query does not exist') &&
+         integration.preferred_pickup_location_name.present? &&
+         pickup_loc_name != integration.preferred_pickup_location_name
+        Rails.logger.warn("[Delhivery] Pickup location '#{pickup_loc_name}' not found on Delhivery. Retrying with master location: #{integration.preferred_pickup_location_name}")
+        payload[:pickup_location] = { name: integration.preferred_pickup_location_name }
+        integration.client.create_shipment(payload: payload)
+      else
+        raise
+      end
     end
   end
 end
