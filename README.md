@@ -1,175 +1,155 @@
-# Spree Delhivery Integration for Spree 5
+<img width="300" height="auto" alt="Delhivery Header" src="https://github.com/user-attachments/assets/c3fb2919-a732-4719-905a-54d202380703" /><br>
 
-<img width="300" height="auto" alt="delhivery Header" src="https://github.com/user-attachments/assets/c3fb2919-a732-4719-905a-54d202380703" /><br>
+# Spree Delhivery (Spree 6 Commerce)
 
-This extension provides a comprehensive integration between **Spree Commerce** and **Delhivery Logistics**. It streamlines your shipping workflow by allowing you to generate waybills, schedule pickups, print labels, and track shipments directly from the Spree Admin panel. It also enhances the customer experience with a storefront delivery availability widget.
+[![Spree Commerce](https://img.shields.io/badge/Spree-6.0.1%20Tested-red.svg)](https://spreecommerce.org)
+[![Rails Version](https://img.shields.io/badge/Rails-8.1.4-blue.svg)](https://rubyonrails.org)
+[![Ruby Version](https://img.shields.io/badge/Ruby-4.0.9-ruby.svg)](https://www.ruby-lang.org)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-## 🚀 Key Features
+A third-party community extension connecting **[Delhivery](https://www.delhivery.com)** to **Spree Commerce 6**.
 
-### 📦 Admin Logistics & Fulfillment
-* **Live Shipping Rates:** Automatically calculates shipping costs based on product weight (volumetric vs actual) and distance.
-* **One-Click Manifesting:** Generate Delhivery Waybills and tracking numbers directly from the Shipment card.
-* **Label Printing:** Download and print official PDF shipping labels (AWB).
-* **Pickup Scheduling:** Schedule carrier pickups for specific dates and times directly from the Admin UI.
-* **Tracking Sync:** Real-time status updates (e.g., *In Transit, Out for Delivery, Delivered, RTO*) displayed with color-coded badges.
-* **Cancellation:** Void/Cancel waybills before pickup directly from Spree.
-
-### 📍 Warehouse Management (Geolocation)
-* **Interactive Map:** Upgraded Stock Location form with a **Leaflet.js** map.
-* **Pinpoint Accuracy:** Search for cities or drag the pin to set precise Latitude/Longitude for accurate pickup calculations.
-* **Auto-Fill:** Automatically captures coordinates to ensure accurate logistics routing.
-
-### 🛍️ Storefront Experience (PDP Widget)
-* **Delivery Checker:** Users can enter their Pincode to check serviceability.
-* **Smart Location Detection:** improved logic to detect and display **"City, District, State"** (e.g., *Bardoli, Surat, Gujarat*) instead of just the post office name.
-* **Estimated Delivery Date (EDD):** Shows dynamic delivery dates based on Delhivery TAT API.
-* **Countdown Timer:** "Order within 2 hrs 30 mins for delivery by Tuesday" logic.
-* **Customizable UI:** Admin controls for widget colors, headings, and placeholder text.
+Provides real-time shipping rate calculation, automated AWB generation, multi-vendor marketplace routing, a dynamic Cash on Delivery (COD) surcharge via Spree 6 Adjusters, and an optional reference tracking experience for the Spree Next.js Storefront.
 
 ---
 
-## 🛠 Installation
+## Features
 
-1. Add this line to your application's `Gemfile`:
+- **Live Dynamic Rate Calculation**: Real-time shipping rate calculation for **Delhivery Surface** and **Delhivery Express** via Delhivery's charges endpoint (`/api/kinko/v1/invoice/charges.json`, part of Delhivery's Kinko API).
+- **Dynamic Cash on Delivery (COD) Surcharge**:
+  - Configurable fee in Spree Admin (e.g., ₹90.00).
+  - Applied automatically as a native typed line item (`Spree::Fee`, `kind: 'cod'`) via Spree 6's adjusters pipeline (`Spree::Adjusters::DelhiveryCodFee`).
+  - Appears dynamically in storefront checkout when COD is selected and disappears when switching to prepaid methods (e.g., Razorpay).
+  - Copied cleanly onto completed orders for consistent invoicing.
+- **Admin Integrations Gallery**: Registers directly into Spree Admin **Settings $\rightarrow$ Integrations** with Delhivery branding (`Spree::ProviderListing`).
+- **Encrypted Secrets at Rest**: API token is secured using Rails Active Record encryption (`V-3730`).
+- **Automated Fulfillment**: AWB assignment, label generation, and dispatch tracking through Delhivery APIs.
+- **Concurrency & Duplicate Booking Protection**: Enforces a 25-second socket timeout and transactional lease coordination to prevent duplicate carrier bookings during network delays or retries.
+- **Multi-Vendor Marketplace Support**: Dynamically extracts seller details for Spree 6 split orders (`R10...-1`, `R10...-2`) and matches registered pickup facilities in Delhivery.
+- **Zero Database Migrations**: Uses native Spree core tables (`spree_integrations`, `spree_delivery_methods`, `spree_payment_methods`, `spree_fees`).
+- **Optional Next.js Storefront Templates**: Reference templates and component guide for customer-facing order tracking (`/order/[number]`) and COD surcharge display.
 
-```ruby
-gem 'spree_delhivery', github: 'umeshravani/spree_delhivery'
+---
+
+## Compatibility
+
+| Component | Verified Tested Version | Intended Compatibility Range |
+|:---|:---|:---|
+| **Spree Commerce** | `6.0.1` | `~> 6.0.0` |
+| **Ruby on Rails** | `8.1.4` | `>= 7.1.0, < 9.0.0` |
+| **Ruby** | `4.0.9` | `>= 3.2.0` |
+| **Storefront** | Next.js `16.0.x` | Spree 6 Next.js Storefront (API V3) |
+
+*For complete architectural details, see [docs/compatibility.md](./docs/compatibility.md).*
+
+---
+
+## Installation & Deployment
+
+### Method 1: Spree CLI (Docker Starter Projects — Recommended)
+
+```bash
+# 1. Add to server/Gemfile
+pnpm spree bundle add spree_delhivery --github "umeshravani/spree_delhivery" --branch "spree-6"
+
+# 2. Run the installation generator
+pnpm spree rails g spree_delhivery:install
+
+# 3. Restart the Spree development stack
+pnpm spree restart
 ```
-2. Install the Gem:
 
-```ruby
-bundle install
+### Method 2: Standard Rails (Non-Docker)
+
+```bash
+# 1. Add to Gemfile
+bundle add spree_delhivery --github "umeshravani/spree_delhivery" --branch "spree-6"
+
+# 2. Run the installation generator
+bin/rails g spree_delhivery:install
+
+# 3. Restart Rails server
+bin/rails restart
 ```
-3. Run the installation generator:
 
-   • This installs migrations.<br>
-   • Runs migrations (optional).<br>
-   • Seeds Shipping Methods: Automatically creates "Delhivery Surface" and "Delhivery Express" shipping methods with correct preferences.
+### Method 3: Production Docker / Coolify Deployment
 
-```ruby
-bundle exec rails g spree_delhivery:install
-```
-<br>
-
- ## ⚙️ Configuration
- 
- ### 1. General Settings
-  
-  Go to Admin Panel -> Integrations -> Delhivery.
-  
-<img width="279" height="332" alt="Integrations Page" src="https://github.com/user-attachments/assets/3da6c1be-92b3-410c-ab00-f0bb27e79099" /><br>
-  
-
-  • API Token: Enter your Delhivery API Token (masked for security).
-
-  • Production Mode: Check this box for live shipments. Uncheck for Sandbox/Testing.
-
-  • Pickup Location: Crucial. This must match the exact warehouse name registered in your Delhivery Dashboard.
-
-  • Unit Mapping: Select how your store stores Weight (kg/lbs) and Dimensions (cm/in) so the calculator converts them correctly for the API.<br>
-
-  <img width="500" height="auto" alt="Integration Settings Delhivery" src="https://github.com/user-attachments/assets/d74ff3ca-13c2-4ff4-9465-2f7e483a9955" /><br>
-
-
-  ### 2. Shipping Methods
-  
-   If you didn't seed them during install, create a Shipping Method in Admin -> Shipping -> Shipping Methods:
-
-  • Calculator: Select Delhivery Live Rate.
-
-  • Service Mode: Enter Surface or Express.
-
-  • Tracking URL: https://www.delhivery.com/track/package/:tracking <br>
-
-  <img width="800" height="auto" alt="Shipping Methods (Auto Added)" src="https://github.com/user-attachments/assets/017a6fda-3059-4bfc-97aa-29f21674e1b4" /><br>
-
-
-  ### 3. Widget Configuration
-  
-  Go to Admin -> Content -> Page Blocks -> Delhivery EDD.
-
-  • Customize the Heading, Button Text, and Colors.
-
-  • Set the Cutoff Time (e.g., 2:00 PM) to control the "Order within..." countdown timer.<br>
-
-  <img width="800" height="auto" alt="Delhivery EDD Widget" src="https://github.com/user-attachments/assets/8802836d-ad0c-4ccb-9bad-629a508322ae" /><br>
-
-
- ## 🖥️ Usage Guide
- 
-  ### Fulfillment Workflow (Admin)
-  
-  1. Navigate to Orders -> Order # -> Shipments.
-
-  2. You will see the unified Delhivery Toolbar on the shipment card.
-
-  3. Ship: Click "Ship with Delhivery". This generates the AWB.
-
-  4. Print: Click the Printer icon to get the PDF label.
-
-  5. Pickup: Click the Truck icon to open the Schedule Pickup Modal. Select date/time and confirm.
-
-  6. Track: Click the Refresh icon to pull the latest status from Delhivery.<br>
-
-  
-  <img width="800" height="auto" alt="Orders Page (Unshipped Order)" src="https://github.com/user-attachments/assets/1c1527b3-4096-4b26-a594-5ebe3f528677" /><br>
-
-  <img width="800" height="560" alt="Shipped Order (Orders Page)" src="https://github.com/user-attachments/assets/9dc19710-e5b9-4e69-a862-ea7d02d1cb13" /><br>
-
-
- ### Storefront Widget
- 
-  To display the Pincode checker on your product page, add this helper to your products/show view file:
-
-  1. Find your Partial file Example: 
-  ```
-    'app/views/themes/default/spree/page_sections/_product_details.html.erb'
-  ```
-Note: If you dont find this file inside your spree's directory, You can [Download](https://github.com/spree/spree/blob/df400d3557c244ec3829f175a27f3990cdeb2452/storefront/app/views/themes/default/spree/page_sections/_product_details.html.erb#L4) this directly from Spree's Github and place it exactly inside your Spree's directory
-
-  2. Place this Rendering Code:
-  
+In containerized deployments:
+1. Add the pinned gem to `server/Gemfile`:
    ```ruby
-    <% when 'Spree::PageBlocks::Products::DelhiveryEdd' %>
-    <%= block.render(self, product: product) %> 
+   gem 'spree_delhivery', github: 'umeshravani/spree_delhivery', branch: 'spree-6'
    ```
-  3. Exactly below this part:
-   ```
-    <% when 'Spree::PageBlocks::Products::Description' %>
-   ```
+2. Lock dependencies: `pnpm spree bundle lock`
+3. Set environment variables in Coolify / Docker Compose (`DELHIVERY_API_TOKEN`, `DELHIVERY_PICKUP_LOCATION_NAME`, `DELHIVERY_CLIENT_NAME`, `DELHIVERY_TEST_MODE`, `DELHIVERY_COD_SURCHARGE`).
+4. Run seeds during post-deployment release phase: `pnpm spree rails spree_delhivery:seeds`.
 
- ## 🧩 Technical Details
- 
- • Maps: Uses OpenStreetMap + Leaflet.js (No Google Maps API key required).
+*For combined installation with Razorpay, see [docs/installation.md](./docs/installation.md).*
 
+---
 
- • Turbo Support: Fully compatible with Turbo Drive; map re-initializes correctly on page transitions.
+## Dashboard Connection & Disconnection
 
+### Connecting the Carrier & COD Gateway
+1. Open your Spree Admin Dashboard (`/admin` or `http://localhost:5173`).
+2. Navigate to **Settings $\rightarrow$ Integrations $\rightarrow$ Delhivery**.
+3. Configure your credentials:
+   - **API Token**: Your Delhivery production or sandbox API token (stored encrypted at rest).
+   - **Client Name**: Your registered Delhivery client name.
+   - **Pickup Location**: The registered warehouse/hub name in your Delhivery portal.
+   - **COD Surcharge**: Amount to charge for COD orders (e.g. `90.00`). Set to `0` for free COD.
+   - **Test Mode**: Checked for staging environments, unchecked for live production.
+4. Click **Save Changes**.
+5. In **Settings $\rightarrow$ Shipping $\rightarrow$ Delivery Methods**, ensure *Delhivery Express* and *Delhivery Surface* have **Active** and **Storefront Visible** enabled.
 
- • Styling: Uses Tailwind CSS utility classes matching Spree's default admin theme.
+### Disconnecting the Carrier or COD (Safe Deactivation)
+To immediately stop offering Delhivery delivery methods or Cash on Delivery:
+1. **To disable COD**: Navigate to **Settings $\rightarrow$ Payments $\rightarrow$ Cash on Delivery (Delhivery COD)** and set **Active** / **Storefront Visible** to `No`.
+2. **To disable Shipping Rates**: Navigate to **Settings $\rightarrow$ Shipping $\rightarrow$ Delivery Methods** and set **Active** / **Storefront Visible** to `No` for *Delhivery Express* and *Delhivery Surface*.
+- Delhivery options disappear from customer checkout immediately.
+- Historical orders, shipments, tracking waybills, and fee line items remain 100% intact.
+- No code or database changes are required.
 
+> [!WARNING]
+> Never delete or retype historical financial or fulfillment records in the database. Disabling via the Admin Dashboard is the only supported, zero-risk method. Gem removal with compatibility shims is advanced and experimental (see [docs/disabling-and-uninstalling.md](./docs/disabling-and-uninstalling.md)).
 
- • Calculations: Handles volumetric weight calculation (L x W x H) / 5000 automatically based on your unit settings.<br>
+---
 
- <img width="800" height="auto" alt="Stock Locations Page (Delhivery Settings)" src="https://github.com/user-attachments/assets/729f5abf-afe7-430f-87ef-93a52997e0c4" /><br>
+## Optional Next.js Storefront & Tracking Integration
 
+The `spree_delhivery` gem provides backend rates, fulfillments, and adjusters. For storefront developers using the Spree Next.js Storefront, reference implementation templates are provided:
+1. **Dynamic COD Surcharge** displayed in the checkout summary and order confirmation.
+2. **Order Tracking Page (`/order/[number]`)** featuring SSR order lookup, live Delhivery scans, and milestone progression.
+3. **Tracking Search View (`/order`)** supporting lookup by Order Number, Delhivery AWB, Email, or Phone.
 
- ## 🛒 Checkout Page Auto-Calculation
- 
- Eliminate guesswork and undercharging for shipping. This extension integrates directly into the Spree Checkout flow (Delivery Step) to provide accurate costs instantly.
+👉 **[Complete Step-by-Step Storefront Guide](./docs/storefront.md)**
 
- • Live API Calls: As soon as a customer enters their shipping address, the calculator queries the Delhivery API for real-time rates based on the specific source and destination pincodes.
+---
 
- • Volumetric Weight Logic: Automatically calculates (Length x Width x Height) / 5000 and compares it against the actual weight. The API requests the rate based on whichever is higher, ensuring you never lose money on bulky, lightweight items.
+## Screenshots
 
- • Performance Caching: Rate responses are cached for 15 minutes to ensure fast page loads and prevent hitting API rate limits during high traffic.
+| Admin Integrations Gallery | Storefront Live Tracking (Optional) |
+|:---:|:---:|
+| ![Delhivery Integration](./docs/assets/screenshots/01-admin-integrations-gallery.png) | ![Live Tracking](./docs/assets/screenshots/07-storefront-order-tracking-timeline.png) |
 
- • Handling Fee Support: Easily add a fixed handling/packing fee on top of the live carrier rate via the Shipping Method preferences.<br>
- 
- <br><img width="800" height="auto" alt="Checkout Page (Auto Calculate Shipping Costs)" src="https://github.com/user-attachments/assets/aa983ad0-638a-4140-971f-f1f56dead652" />
+*For the complete screenshot inventory and masking checklist, see [docs/screenshots.md](./docs/screenshots.md).*
 
+---
 
+## Documentation Index
 
- ## 🤝 Contributing
- 
-   Bug reports and pull requests are welcome on GitHub. This project is intended to be a safe, welcoming space for collaboration.
+- [Installation Guide](./docs/installation.md)
+- [Configuration Guide](./docs/configuration.md)
+- [Next.js Storefront & Order Tracking (Optional)](./docs/storefront.md)
+- [Disabling & Safe Removal](./docs/disabling-and-uninstalling.md)
+- [Compatibility Matrix](./docs/compatibility.md)
+- [Upgrading Guide](./docs/upgrading.md)
+- [Screenshots Checklist & Privacy](./docs/screenshots.md)
+- [Changelog](./CHANGELOG.md)
+
+---
+
+## Contributing & License
+
+Bug reports and pull requests are welcome on GitHub.
+
+Spree Delhivery is released under the [MIT License](LICENSE).

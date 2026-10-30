@@ -1,38 +1,40 @@
 # frozen_string_literal: true
 
+require 'rails/engine'
+
 module SpreeDelhivery
   class Engine < Rails::Engine
     require 'spree/core'
     isolate_namespace Spree
     engine_name 'spree_delhivery'
 
-    # 1. Load Decorators
-    def self.activate
+    initializer 'spree_delhivery.inflections', before: :set_autoload_paths do
+      Rails.autoloaders.each do |autoloader|
+        autoloader.inflector.inflect('spree_delhivery' => 'SpreeDelhivery')
+      end
+    end
+
+    config.generators do |g|
+      g.test_framework :rspec
+    end
+
+    config.to_prepare do
       Dir.glob(File.join(File.dirname(__FILE__), '../../app/**/*_decorator*.rb')) do |c|
-        Rails.configuration.cache_classes ? require(c) : load(c)
+        load(c)
       end
     end
 
-    config.to_prepare(&method(:activate).to_proc)
-
-    # 2. OVERRIDE VIEWS
-    initializer "spree_delhivery.views", before: :load_config_initializers do |app|
-      app.config.paths["app/views"].unshift File.join(root, "app/views")
-    end
-
-    # 3. REGISTER INTEGRATION
-    initializer "spree_delhivery.register.integrations" do |app|
-      Rails.application.config.after_initialize do
-        if Rails.application.config.respond_to?(:spree)
-          Rails.application.config.spree.integrations << Spree::Integrations::Delhivery
+    config.after_initialize do
+      Spree.integrations << 'SpreeDelhivery::Integration'
+      Spree.delivery_rate_providers << SpreeDelhivery::DeliveryRateProvider
+      Spree.fulfillment_providers << SpreeDelhivery::FulfillmentProvider
+      Rails.application.config.spree.payment_methods << Spree::PaymentMethod::DelhiveryCod
+      
+      require_relative '../../app/models/spree/adjusters/delhivery_cod_fee'
+      if Rails.application.config.spree.respond_to?(:adjusters) && Rails.application.config.spree.adjusters
+        unless Rails.application.config.spree.adjusters.include?(Spree::Adjusters::DelhiveryCodFee)
+          Rails.application.config.spree.adjusters << Spree::Adjusters::DelhiveryCodFee
         end
-      end
-    end
-
-    # 4. REGISTER CALCULATOR
-    config.after_initialize do |app|
-      if app.config.spree.calculators.respond_to?(:shipping_methods)
-        app.config.spree.calculators.shipping_methods << Spree::Calculator::Shipping::Delhivery
       end
     end
   end

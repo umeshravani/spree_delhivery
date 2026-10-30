@@ -1,22 +1,16 @@
-# Configure Rails Environment
-ENV['RAILS_ENV'] = 'test'
+# frozen_string_literal: true
 
-require 'dotenv/load'
+require 'rspec'
+require 'active_support/all'
 
-require File.expand_path('../dummy/config/environment.rb', __FILE__)
-
-require 'spree_dev_tools/rspec/spec_helper'
-require 'spree_delhivery/factories'
-
-# Requires supporting ruby files with custom matchers and macros, etc,
-# in spec/support/ and its subdirectories.
-Dir[File.join(File.dirname(__FILE__), 'support/**/*.rb')].sort.each { |f| require f }
-
-def json_response
-  case body = JSON.parse(response.body)
-  when Hash
-    body.with_indifferent_access
-  when Array
-    body
+RSpec.configure do |config|
+  config.expect_with :rspec do |expectations|
+    expectations.include_chain_clauses_in_custom_matcher_descriptions = true
   end
+
+  config.mock_with :rspec do |mocks|
+    mocks.verify_partial_doubles = true
+  end
+
+  config.order = :random
 end
