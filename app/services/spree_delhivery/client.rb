@@ -104,6 +104,8 @@ module SpreeDelhivery
     def create_shipment(payload:)
       active_url = @base_url
       conn = Faraday.new(url: active_url) do |f|
+        f.options.timeout      = 25
+        f.options.open_timeout = 10
         f.request :url_encoded
         f.adapter Faraday.default_adapter
       end
@@ -117,6 +119,8 @@ module SpreeDelhivery
       if response.status == 401 && active_url != LIVE_URL
         active_url = LIVE_URL
         conn = Faraday.new(url: active_url) do |f|
+          f.options.timeout      = 25
+          f.options.open_timeout = 10
           f.request :url_encoded
           f.adapter Faraday.default_adapter
         end
@@ -293,6 +297,8 @@ module SpreeDelhivery
 
     def connection(url = @base_url)
       Faraday.new(url: url) do |f|
+        f.options.timeout      = 25
+        f.options.open_timeout = 10
         f.request :url_encoded
         f.adapter Faraday.default_adapter
         f.headers['Authorization'] = "Token #{@api_token}"
