@@ -43,3 +43,4 @@ All data models utilize native Spree 6 core tables:
 - `spree_delivery_methods`: Stores Express and Surface shipping methods.
 - `spree_payment_methods`: Stores the COD payment method.
 - `spree_fees`: Stores dynamic COD surcharges on carts and completed orders.
+

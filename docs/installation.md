@@ -156,11 +156,28 @@ Spree.adjusters.include?(Spree::Adjusters::DelhiveryCodFee) # => true
 
 ---
 
+## Dashboard Connection and Disconnection
+
+Once installed, connect or disconnect the extension directly through the Spree Admin Dashboard without code changes:
+
+### Connecting the Carrier & Methods
+1. Navigate to **Settings $\rightarrow$ Integrations $\rightarrow$ Delhivery**.
+2. Enter your **API Token**, **Client Name**, and **Pickup Location**.
+3. In **Settings $\rightarrow$ Shipping $\rightarrow$ Delivery Methods**, ensure *Delhivery Express* and *Delhivery Surface* have **Active** and **Storefront Visible** enabled.
+4. In **Settings $\rightarrow$ Payments**, enable **Cash on Delivery (Delhivery COD)**.
+
+### Disconnecting the Carrier or COD (Safe Deactivation)
+1. **To disable COD**: Set **Active** / **Storefront Visible** to `No` in **Settings $\rightarrow$ Payments $\rightarrow$ Cash on Delivery (Delhivery COD)**.
+2. **To disable Shipping Rates**: Set **Active** / **Storefront Visible** to `No` in **Settings $\rightarrow$ Shipping $\rightarrow$ Delivery Methods**.
+3. Changes apply instantly without requiring server restarts or database modifications. Historical orders and tracking numbers remain 100% accessible.
+
+---
+
 ## Troubleshooting
 
 ### Error: `Faraday::TimeoutError` during rate calculation or fulfillment
 - **Cause**: Network latency or carrier API lag exceeding default gateway timeout.
-- **Fix**: The integration includes a built-in 25-second lease-safe boundary. Check that your server can access `https://track.delhivery.com` and `https://stage-express.delhivery.com`.
+- **Fix**: The integration includes a built-in 25-second lease-safe boundary. Check that your server can access `https://track.delhivery.com` and `https://staging-express.delhivery.com`.
 
 ### Error: `Errno::EACCES (Permission denied @ dir_s_mkdir - /rails/storage/...)`
 - **Cause**: In Docker environments running as UID `1000:1000`, the persistent storage directory was created by `root`.
@@ -169,3 +186,4 @@ Spree.adjusters.include?(Spree::Adjusters::DelhiveryCodFee) # => true
 ### Error: `No delivery rates available at checkout`
 - **Cause**: The shipping address destination country/state is not assigned to a Shipping Zone that includes Delhivery delivery methods.
 - **Fix**: In **Settings $\rightarrow$ Shipping $\rightarrow$ Zones**, ensure India or your delivery region is mapped to the zones associated with Delhivery delivery methods.
+

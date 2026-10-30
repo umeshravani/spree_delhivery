@@ -8,15 +8,15 @@ This document catalogs the required visual documentation for **Spree Delhivery**
 
 Store all screenshot assets in `docs/assets/screenshots/` using standard lowercase kebab-case naming.
 
-| ID | File Name | Screen Description | Location in App | Status |
-|:---|:---|:---|:---|:---:|
-| `DLH-01` | `01-admin-integrations-gallery.png` | Spree Admin Integrations card showing official Delhivery branding | Admin $\rightarrow$ **Settings $\rightarrow$ Integrations** | Pending capture |
-| `DLH-02` | `02-admin-delhivery-configuration.png` | Delhivery Credentials & Settings form (Client name, Pickup location, COD fee) | Admin $\rightarrow$ **Settings $\rightarrow$ Integrations $\rightarrow$ Delhivery** | Pending capture |
-| `DLH-03` | `03-admin-delivery-methods-list.png` | Delivery methods table displaying *Delhivery Express* and *Delhivery Surface* | Admin $\rightarrow$ **Settings $\rightarrow$ Shipping $\rightarrow$ Delivery Methods** | Pending capture |
-| `DLH-04` | `04-storefront-checkout-shipping-rates.png` | Storefront delivery step displaying live calculated Delhivery rates | Storefront $\rightarrow$ Checkout Delivery Step | Pending capture |
-| `DLH-05` | `05-storefront-checkout-cod-surcharge.png` | Payment step with Cash on Delivery selected and dynamic COD Surcharge fee | Storefront $\rightarrow$ Checkout Payment Step & Summary | Pending capture |
-| `DLH-06` | `06-admin-shipment-awb-assignment.png` | Admin order fulfillment card showing generated Delhivery AWB & label | Admin $\rightarrow$ **Orders $\rightarrow$ [Order Number] $\rightarrow$ Shipments** | Pending capture |
-| `DLH-07` | `07-storefront-order-tracking-timeline.png` | Customer-facing tracking page with 2-column live milestone timeline | Storefront $\rightarrow$ `/order/[number]` or `/order` lookup | Pending capture |
+| ID | File Name | Scope | Screen Description | Location in App | Status |
+|:---|:---|:---|:---|:---|:---:|
+| `DLH-01` | `01-admin-integrations-gallery.png` | **Core Spree Admin** | Spree Admin Integrations card showing Delhivery provider tile | Admin $\rightarrow$ **Settings $\rightarrow$ Integrations** | Pending capture |
+| `DLH-02` | `02-admin-delhivery-configuration.png` | **Core Spree Admin** | Delhivery Credentials & Settings form (Client name, Pickup location, COD fee) | Admin $\rightarrow$ **Settings $\rightarrow$ Integrations $\rightarrow$ Delhivery** | Pending capture |
+| `DLH-03` | `03-admin-delivery-methods-list.png` | **Core Spree Admin** | Delivery methods table displaying *Delhivery Express* and *Delhivery Surface* | Admin $\rightarrow$ **Settings $\rightarrow$ Shipping $\rightarrow$ Delivery Methods** | Pending capture |
+| `DLH-04` | `04-storefront-checkout-shipping-rates.png` | **Optional Next.js Storefront** | Storefront delivery step displaying live calculated Delhivery rates | Storefront $\rightarrow$ Checkout Delivery Step | Pending capture |
+| `DLH-05` | `05-storefront-checkout-cod-surcharge.png` | **Optional Next.js Storefront** | Payment step with Cash on Delivery selected and dynamic COD Surcharge fee | Storefront $\rightarrow$ Checkout Payment Step & Summary | Pending capture |
+| `DLH-06` | `06-admin-shipment-awb-assignment.png` | **Core Spree Admin** | Admin order fulfillment card showing generated Delhivery AWB & label link | Admin $\rightarrow$ **Orders $\rightarrow$ [Order Number] $\rightarrow$ Shipments** | Pending capture |
+| `DLH-07` | `07-storefront-order-tracking-timeline.png` | **Optional Next.js Storefront** | Customer-facing tracking page with 2-column live milestone timeline | Storefront $\rightarrow$ `/order/[number]` or `/order` lookup | Pending capture |
 
 ---
 
@@ -98,3 +98,4 @@ Before committing any screenshot image, verify the following masking checklist:
 - [ ] **Email Addresses**: Use standard test domains (e.g., `customer@example.com` or `buyer@demo.store`).
 - [ ] **Physical Delivery Addresses**: Redact flat/building numbers; retain only city, state, and pincode (e.g., `Connaught Place, New Delhi, Delhi - 110001`).
 - [ ] **Internal Hostnames**: Replace custom internal VPS IP addresses or private domains with `spree.example.com` or `localhost:3000`.
+

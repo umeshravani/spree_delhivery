@@ -1,6 +1,10 @@
 # Storefront Integration Guide (Next.js App Router)
 
-This comprehensive guide details how to integrate **Spree Delhivery** with the official Spree 6 Next.js Storefront (`apps/storefront`).
+> [!NOTE]
+> **Optional Frontend Integration Guide**
+> The `spree_delhivery` Ruby gem is a backend Rails engine that provides delivery rate calculation, fulfillment providers, and COD adjusters for Spree 6 API V3. The Next.js components, tracking timeline, and order search views documented below are reference implementations for storefront developers building with the Spree Next.js Storefront (`apps/storefront`).
+
+This comprehensive guide details how to integrate **Spree Delhivery** with the Spree 6 Next.js Storefront (`apps/storefront`).
 
 It covers two core experiences:
 1. **Dynamic Cash on Delivery (COD) Surcharge** in checkout.
@@ -480,3 +484,4 @@ export default async function OrderSearchPage({
   return <OrderLookupView basePath={basePath} />;
 }
 ```
+

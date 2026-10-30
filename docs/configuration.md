@@ -100,11 +100,24 @@ Carrier booking requests are sensitive to network timeouts and double-clicks. Sp
 
 ---
 
-## 6. Endpoints & Sandbox Testing
+## 6. Rate Calculation Details (Kinko Charges API) & Testing
 
-| Environment | Mode | Tracking & Booking Host | Rates (Kinko) Host |
+Delhivery's rate calculation provider queries Delhivery's charges endpoint:
+- **Endpoint**: `/api/kinko/v1/invoice/charges.json` (part of Delhivery's Kinko API).
+- **Parameters Sent**:
+  - `md`: Shipping mode (`'E'` for Express / Air, `'S'` for Surface).
+  - `ss`: Status code (`'Delivered'`).
+  - `o_pin`: Origin warehouse pincode.
+  - `d_pin`: Customer destination pincode.
+  - `cgm`: Chargeable weight in grams (minimum 50g).
+  - `pt`: Payment type (`'Pre-paid'` or `'COD'`).
+
+### Endpoints by Environment
+
+| Environment | Mode | Base Host | Endpoint Path |
 |:---|:---:|:---|:---|
-| **Staging / Sandbox** | `DELHIVERY_TEST_MODE=true` | `https://stage-express.delhivery.com` | `https://stage-express.delhivery.com` |
-| **Production** | `DELHIVERY_TEST_MODE=false` | `https://express.delhivery.com` / `https://track.delhivery.com` | `https://express.delhivery.com` |
+| **Staging / Sandbox** | `DELHIVERY_TEST_MODE=true` | `https://staging-express.delhivery.com` | `/api/kinko/v1/invoice/charges.json` |
+| **Production** | `DELHIVERY_TEST_MODE=false` | `https://track.delhivery.com` | `/api/kinko/v1/invoice/charges.json` |
 
-To test shipping rates without live credentials, the staging sandbox responds to standard pincodes (e.g., Origin: `110001`, Destination: `400001`, Weight: `500g`).
+To test shipping rates without live credentials, the staging sandbox responds to standard test pincodes (e.g., Origin: `110001`, Destination: `400001`, Weight: `500g`).
+

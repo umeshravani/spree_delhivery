@@ -1,10 +1,10 @@
 # Disabling and Safe Uninstallation
 
-This document explains how to safely disable **Spree Delhivery** and outlines the technical risks and mitigation steps if permanently removing the gem.
+This document explains how to safely disable **Spree Delhivery** via the Spree Admin Dashboard and outlines the technical risks and constraints of experimental gem removal.
 
 ---
 
-## 1. Safe Disabling (Recommended)
+## 1. Recommended Safe Procedure: Dashboard Deactivation
 
 If you wish to temporarily or permanently stop offering Delhivery delivery methods or Cash on Delivery (COD) to customers, **do NOT delete the gem from your `Gemfile`**.
 
@@ -27,7 +27,7 @@ Instead, disable the integration and methods via the Spree Admin Dashboard:
 1. Navigate to Spree Admin $\rightarrow$ **Settings $\rightarrow$ Integrations $\rightarrow$ Delhivery**.
 2. Set **Active** to `No` and click **Save Changes**.
 
-### Why Disabling is the Recommended Approach:
+### Why Dashboard Deactivation is the Only Recommended Approach:
 - **Zero Downtime**: Changes take effect immediately without requiring application rebuilds or deployments.
 - **Historical Integrity**: Completed orders, customer receipts, and past delivery waybills retain their full historical data.
 - **No STI Crashes**: Existing records in database tables continue to load cleanly.
@@ -36,7 +36,7 @@ Instead, disable the integration and methods via the Spree Admin Dashboard:
 
 ## 2. The Rails Single Table Inheritance (STI) Hazard
 
-Like official Spree payment and delivery providers, Spree Delhivery uses Rails Single Table Inheritance (STI):
+Spree Delhivery stores Ruby class names in Spree core Single Table Inheritance (STI) tables:
 
 | Table | Column | Stored Ruby Class |
 |:---|:---|:---|
@@ -49,38 +49,44 @@ Like official Spree payment and delivery providers, Spree Delhivery uses Rails S
 If you delete `gem 'spree_delhivery'` from `server/Gemfile` while historical records exist in `spree_payment_methods` or `spree_integrations`:
 
 1. Rails boots without defining the classes `Spree::PaymentMethod::DelhiveryCod` or `SpreeDelhivery::Integration`.
-2. When the Spree Admin visits the Payments, Integrations, or Orders pages, Active Record runs `SELECT * FROM spree_payment_methods` or `SELECT * FROM spree_integrations`.
+2. When staff visit the Payments, Shipping, Integrations, or Orders pages in Spree Admin, Active Record queries these tables.
 3. Active Record attempts to instantiate each row by constantizing the class name in the `type` column.
 4. Rails crashes with:
-   ```
+   ```text
    ActiveRecord::SubclassNotFound:
      The single-table inheritance mechanism failed to locate the subclass: 'SpreeDelhivery::Integration'.
-     Make sure the subclass is defined and exists in your code.
    ```
    or
-   ```
+   ```text
    ActiveRecord::SubclassNotFound:
      The single-table inheritance mechanism failed to locate the subclass: 'Spree::PaymentMethod::DelhiveryCod'.
    ```
 
-This crash prevents staff from managing any orders or settings in the Admin Dashboard.
+### Never Delete or Retype Historical Financial Records
+Never execute SQL queries deleting payment or fulfillment records or reassigning `spree_payment_methods.type` or `spree_integrations.type`.
+- It falsifies cash collection records for past Cash on Delivery shipments.
+- It destroys carrier tracking numbers, packing slip links, and fulfillment audit records on customer orders.
+- It breaks financial reconciliation between order totals and bank deposits.
 
 ---
 
-## 3. Safe Uninstallation Procedure (Permanent Gem Removal)
+## 3. Advanced & Experimental: Code Removal Compatibility Shim
 
-If you must permanently remove the gem from your codebase, you must either sanitize historical database records or install a lightweight compatibility shim.
+> [!WARNING]
+> **Unsupported for Production Stores with Historical Orders or Fulfillments**
+> Complete gem uninstallation is NOT recommended if your store has processed real shipments or COD orders. While a minimal Ruby class shim prevents immediate `ActiveRecord::SubclassNotFound` errors when loading simple records, fulfillment tracking updates, carrier re-checks, and background jobs will fail with `NoMethodError` because the gem's service objects and clients are no longer loaded.
+>
+> Dashboard deactivation (Section 1) is the only fully tested, supported, and zero-risk procedure.
 
-### Option A: Compatibility Shim (Preserves Historical Data)
-
-Before or immediately after removing the gem from `Gemfile`, create a lightweight fallback shim in your Rails app:
+If you are running an experimental or non-production environment where the gem must be pruned from `Gemfile`, define empty class shims in your host application:
 
 **File:** `server/config/initializers/spree_delhivery_shim.rb`
 
 ```ruby
 # frozen_string_literal: true
 
-# Preserves historical records when spree_delhivery gem is removed.
+# Advanced/Experimental: Allows basic Active Record loading when spree_delhivery is removed.
+# Note: Runtime methods (tracking lookups, rate calculation, fulfillment) are NOT functional.
 unless defined?(SpreeDelhivery::Integration)
   module SpreeDelhivery
     class Integration < Spree::Integration
@@ -98,20 +104,7 @@ unless defined?(Spree::PaymentMethod::DelhiveryCod)
 end
 ```
 
-This prevents `ActiveRecord::SubclassNotFound` while allowing you to safely remove `spree_delhivery` from `Gemfile`.
-
----
-
-### Option B: Database Record Sanitization
-
-If you prefer not to maintain a shim and have verified that historical data can be archived:
-
-1. Deactivate all Delhivery methods and integrations.
-2. In Rails console:
-   ```ruby
-   # Archive or nullify historical method references
-   Spree::PaymentMethod.where(type: 'Spree::PaymentMethod::DelhiveryCod').update_all(active: false, storefront_visible: false)
-   Spree::Integration.where(type: 'SpreeDelhivery::Integration').destroy_all
-   ```
-3. Remove `spree_delhivery` from `server/Gemfile`.
-4. Run `pnpm spree bundle lock` and restart the application.
+### Limitations of the Compatibility Shim:
+1. **No Live Tracking Updates**: Attempting to sync or refresh carrier tracking on historical shipments will fail.
+2. **No Packing Slip Downloads**: PDF waybill links cannot be regenerated.
+3. **Read-Only Inspection Only**: The shim is strictly suitable for basic display of past orders.
