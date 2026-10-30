@@ -211,10 +211,12 @@ module SpreeDelhivery
     end
 
     def order_reference_for(owner, order)
-      if owner.respond_to?(:number) && owner.number.present? && owner.number != order.number
-        "#{order.number}-#{owner.number}"
+      ord_num = (order.respond_to?(:number) ? order.number : nil).presence
+      own_num = (owner.respond_to?(:number) ? owner.number : nil).presence
+      if own_num.present? && own_num != ord_num
+        [ord_num, own_num].compact.join('-')
       else
-        order.number
+        ord_num || own_num || (owner.respond_to?(:id) ? owner.id.to_s : 'DELHIVERY_REF')
       end
     end
 
