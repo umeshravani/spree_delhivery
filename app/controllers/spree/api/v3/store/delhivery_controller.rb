@@ -120,8 +120,17 @@ module Spree
             }
           end
 
+          def resolve_store_instance
+            begin
+              current_store if defined?(request) && request
+            rescue StandardError
+              nil
+            end || Spree::Store.default
+          end
+
           def resolve_delhivery_credentials
-            integration = current_store&.integrations&.find_by(type: 'SpreeDelhivery::Integration', active: true) ||
+            store = resolve_store_instance
+            integration = store&.integrations&.find_by(type: 'SpreeDelhivery::Integration', active: true) ||
                           Spree::Integration.find_by(type: 'SpreeDelhivery::Integration', active: true)
 
             token = integration&.preferred_api_token.presence || ENV['DELHIVERY_API_TOKEN'].presence
@@ -201,7 +210,8 @@ module Spree
               return postal_code['expected_tat'].to_i
             end
 
-            source_pin = current_store&.default_stock_location&.zipcode.presence ||
+            store = resolve_store_instance
+            source_pin = store&.default_stock_location&.zipcode.presence ||
                          Spree::StockLocation.where(active: true).where.not(zipcode: [nil, '']).first&.zipcode.presence ||
                          '110001'
 
