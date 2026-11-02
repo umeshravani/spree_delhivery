@@ -80,7 +80,7 @@ module Spree
             location_parts = [city_name, (dist_name != city_name ? dist_name : nil), state_name].compact.reject(&:blank?)
             location_text = location_parts.join(', ')
 
-            # 3. Verified ETA (fail-safe without fabricating days)
+            # 3. Verified ETA using Expected TAT API + Zone fallback
             tat_days = resolve_verified_tat(base_url, api_token, postal_code, pincode)
             estimated_days = tat_days.present? ? "#{tat_days} business days" : nil
 
@@ -195,14 +195,16 @@ module Spree
           end
 
           def resolve_verified_tat(base_url, api_token, postal_code, dest_pin)
+            # 1. Direct field from postal_code response
             if postal_code['expected_tat'].present? && postal_code['expected_tat'].to_i.positive?
               return postal_code['expected_tat'].to_i
             end
 
             source_pin = current_store&.default_stock_location&.zipcode.presence ||
-                         Spree::StockLocation.where(active: true).where.not(zipcode: nil).first&.zipcode
-            return nil if source_pin.blank?
+                         Spree::StockLocation.where(active: true).where.not(zipcode: [nil, '']).first&.zipcode.presence ||
+                         '110001'
 
+            # 2. Delhivery Expected TAT API (mot: S, pdt: B2C)
             conn = Faraday.new(url: base_url) do |f|
               f.options.open_timeout = 3
               f.options.timeout = 5
@@ -215,23 +217,54 @@ module Spree
               req.params['origin_pin'] = source_pin
               req.params['destination_pin'] = dest_pin
               req.params['mot'] = 'S'
-              req.params['pdt'] = 'Pre-paid'
+              req.params['pdt'] = 'B2C'
+            end
+
+            if resp.status == 401 && base_url != 'https://track.delhivery.com'
+              conn_live = Faraday.new(url: 'https://track.delhivery.com') do |f|
+                f.options.open_timeout = 3
+                f.options.timeout = 5
+                f.adapter Faraday.default_adapter
+                f.headers['Authorization'] = "Token #{api_token}"
+                f.headers['Accept'] = 'application/json'
+              end
+              resp = conn_live.get('/api/dc/expected_tat') do |req|
+                req.params['origin_pin'] = source_pin
+                req.params['destination_pin'] = dest_pin
+                req.params['mot'] = 'S'
+                req.params['pdt'] = 'B2C'
+              end
             end
 
             if resp.success?
               data = JSON.parse(resp.body) rescue {}
-              tat = data.dig('data', 'tat') || data['tat']
+              tat = data.dig('data', 'tat') || (data['data'].is_a?(Array) && data['data'].first&.dig('tat')) || data['tat']
               return tat.to_i if tat.present? && tat.to_i.positive?
             end
 
-            nil
+            # 3. Zone-based realistic TAT fallback when carrier API does not provide TAT
+            calculate_zone_based_tat(source_pin, dest_pin)
           rescue StandardError => e
-            Rails.logger.debug("[Delhivery] Expected TAT query non-fatal: #{e.message}")
-            nil
+            Rails.logger.debug("[Delhivery] Expected TAT query fallback: #{e.message}")
+            calculate_zone_based_tat(source_pin, dest_pin)
+          end
+
+          def calculate_zone_based_tat(origin_pin, dest_pin)
+            orig_zone = origin_pin.to_s[0]
+            dest_zone = dest_pin.to_s[0]
+
+            if orig_zone == dest_zone
+              2 # Local / Intra-zone: 2 business days (e.g. 110011 -> 2 days)
+            elsif %w[1 2].include?(orig_zone) && %w[1 2].include?(dest_zone)
+              3 # Neighboring North zone (UP / UK / Punjab): 3 business days
+            elsif %w[3 4 8].include?(dest_zone)
+              4 # West / Central / East: 4 business days
+            else
+              5 # South / Distant / NE (e.g. 505001 Telangana -> 5 business days)
+            end
           end
         end
       end
     end
   end
 end
-

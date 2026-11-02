@@ -67,6 +67,35 @@ module SpreeDelhivery
       false
     end
 
+
+# --- 1b. Expected TAT (Turnaround Time) API ---
+def expected_tat(origin_pin:, destination_pin:, mode: "S", product_type: "B2C")
+  response = connection.get("/api/dc/expected_tat") do |req|
+    req.params["origin_pin"]      = origin_pin.to_s.strip
+    req.params["destination_pin"] = destination_pin.to_s.strip
+    req.params["mot"]             = mode
+    req.params["pdt"]             = product_type
+  end
+
+  if response.status == 401 && @base_url != LIVE_URL
+    response = connection(LIVE_URL).get("/api/dc/expected_tat") do |req|
+      req.params["origin_pin"]      = origin_pin.to_s.strip
+      req.params["destination_pin"] = destination_pin.to_s.strip
+      req.params["mot"]             = mode
+      req.params["pdt"]             = product_type
+    end
+  end
+
+  return nil unless response.success?
+
+  data = parse_json(response.body)
+  tat = data.dig("data", "tat") || (data["data"].is_a?(Array) && data["data"].first&.dig("tat")) || data["tat"]
+  tat.present? && tat.to_i.positive? ? tat.to_i : nil
+rescue StandardError => e
+  Rails.logger.warn("[Delhivery] Expected TAT API error: #{e.message}")
+  nil
+end
+
     # --- 2. Live Dynamic Rate Calculation (Kinko API) ---
     def calculate_rate(origin_pin:, destination_pin:, weight_in_grams:, mode: 'E', payment_type: 'Pre-paid')
       response = connection.get('/api/kinko/v1/invoice/charges.json') do |req|
