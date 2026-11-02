@@ -112,7 +112,7 @@ module Spree
               message: 'Delivery serviceability check unavailable.'
             }
           rescue StandardError => e
-            Rails.logger.error("[Delhivery] Unexpected error querying pincode #{pincode}: #{e.message}")
+            Rails.logger.error("[Delhivery] Unexpected error querying pincode #{pincode}: #{e.message}\n#{e.backtrace.first(5).join("\n")}")
             {
               pincode: pincode,
               serviceable: false,
@@ -132,12 +132,15 @@ module Spree
           end
 
           def fetch_carrier_pin_data(base_url, api_token, pincode)
-            conn = Faraday.new(url: base_url) do |f|
+            headers = {
+              'Authorization' => "Token #{api_token}",
+              'Accept' => 'application/json'
+            }
+
+            conn = Faraday.new(url: base_url, headers: headers) do |f|
               f.options.open_timeout = 5
               f.options.timeout = 8
               f.adapter Faraday.default_adapter
-              f.headers['Authorization'] = "Token #{api_token}"
-              f.headers['Accept'] = 'application/json'
             end
 
             response = conn.get('/c/api/pin-codes/json/') do |req|
@@ -146,12 +149,10 @@ module Spree
 
             # Delhivery test credentials frequently query pincode directory on live host
             if response.status == 401 && base_url != 'https://track.delhivery.com'
-              conn_live = Faraday.new(url: 'https://track.delhivery.com') do |f|
+              conn_live = Faraday.new(url: 'https://track.delhivery.com', headers: headers) do |f|
                 f.options.open_timeout = 5
                 f.options.timeout = 8
                 f.adapter Faraday.default_adapter
-                f.headers['Authorization'] = "Token #{api_token}"
-                f.headers['Accept'] = 'application/json'
               end
               response = conn_live.get('/c/api/pin-codes/json/') do |req|
                 req.params['filter_codes'] = pincode
@@ -204,13 +205,16 @@ module Spree
                          Spree::StockLocation.where(active: true).where.not(zipcode: [nil, '']).first&.zipcode.presence ||
                          '110001'
 
+            headers = {
+              'Authorization' => "Token #{api_token}",
+              'Accept' => 'application/json'
+            }
+
             # 2. Delhivery Expected TAT API (mot: S, pdt: B2C)
-            conn = Faraday.new(url: base_url) do |f|
+            conn = Faraday.new(url: base_url, headers: headers) do |f|
               f.options.open_timeout = 3
               f.options.timeout = 5
               f.adapter Faraday.default_adapter
-              f.headers['Authorization'] = "Token #{api_token}"
-              f.headers['Accept'] = 'application/json'
             end
 
             resp = conn.get('/api/dc/expected_tat') do |req|
@@ -221,12 +225,10 @@ module Spree
             end
 
             if resp.status == 401 && base_url != 'https://track.delhivery.com'
-              conn_live = Faraday.new(url: 'https://track.delhivery.com') do |f|
+              conn_live = Faraday.new(url: 'https://track.delhivery.com', headers: headers) do |f|
                 f.options.open_timeout = 3
                 f.options.timeout = 5
                 f.adapter Faraday.default_adapter
-                f.headers['Authorization'] = "Token #{api_token}"
-                f.headers['Accept'] = 'application/json'
               end
               resp = conn_live.get('/api/dc/expected_tat') do |req|
                 req.params['origin_pin'] = source_pin
