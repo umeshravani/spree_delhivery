@@ -64,34 +64,50 @@ module SpreeDelhivery
 
       origin_group = profile.delivery_origin_groups.first_or_create!
 
-      # 1. Delhivery Express Method
-      express = Spree::DeliveryMethod.find_or_initialize_by(code: 'DELHIVERY_EXPRESS', store: store)
-      express.name = 'Delhivery Express'
-      express.admin_name = 'Delhivery Express'
-      express.delivery_profile = profile
-      express.delivery_origin_group = origin_group
-      express.rate_provider = 'SpreeDelhivery::DeliveryRateProvider'
-      express.fulfillment_provider = 'SpreeDelhivery::FulfillmentProvider'
-      express.available_to_sellers = true
-      express.storefront_visible = active?
-      express.save!
-
-      # 2. Delhivery Surface Method
+      # 1. Delhivery Surface Method
       surface = Spree::DeliveryMethod.find_or_initialize_by(code: 'DELHIVERY_SURFACE', store: store)
-      surface.name = 'Delhivery Surface'
-      surface.admin_name = 'Delhivery Surface'
+      surface.name = 'Delhivery Surface' if surface.name.blank?
+      surface.admin_name = 'Delhivery Surface' if surface.admin_name.blank?
       surface.delivery_profile = profile
       surface.delivery_origin_group = origin_group
       surface.rate_provider = 'SpreeDelhivery::DeliveryRateProvider'
       surface.fulfillment_provider = 'SpreeDelhivery::FulfillmentProvider'
       surface.available_to_sellers = true
-      surface.storefront_visible = active?
+      surface.storefront_visible = true
       surface.save!
+
+      if surface.respond_to?(:services)
+        surface_svc = surface.services.find_or_initialize_by(carrier: 'Delhivery', service: 'Surface')
+        surface_svc.label = 'Delhivery Surface'
+        surface_svc.position = 1
+        surface_svc.save!
+      end
+
+      # 2. Delhivery Express Method
+      express = Spree::DeliveryMethod.find_or_initialize_by(code: 'DELHIVERY_EXPRESS', store: store)
+      express.name = 'Delhivery Express' if express.name.blank?
+      express.admin_name = 'Delhivery Express' if express.admin_name.blank?
+      express.delivery_profile = profile
+      express.delivery_origin_group = origin_group
+      express.rate_provider = 'SpreeDelhivery::DeliveryRateProvider'
+      express.fulfillment_provider = 'SpreeDelhivery::FulfillmentProvider'
+      express.available_to_sellers = true
+      express.storefront_visible = true
+      express.save!
+
+      if express.respond_to?(:services)
+        express_svc = express.services.find_or_initialize_by(carrier: 'Delhivery', service: 'Express')
+        express_svc.label = 'Delhivery Express (Air)'
+        express_svc.position = 1
+        express_svc.save!
+      end
 
       # Remove obsolete separate profiles if they exist
       Spree::DeliveryProfiles::Shipping.where(store: store, name: ['Delhivery Express', 'Delhivery Surface']).where.not(id: profile.id).destroy_all
+      profile
     rescue StandardError => e
       Rails.logger.warn("[SpreeDelhivery] Error ensuring delivery profile/methods: #{e.message}")
+      raise e
     end
 
     def webhook_url

@@ -5,6 +5,8 @@ module Spree
     module V3
       module Admin
         class DelhiveryController < Spree::Api::V3::Admin::BaseController
+          skip_scope_check!
+
           def metadata
             token = params[:api_token].presence || integration&.preferred_api_token
             test_mode = if params[:test_mode].present?
@@ -13,12 +15,15 @@ module Spree
                           integration&.preferred_test_mode? || false
                         end
 
+            profile_status = check_delhivery_profiles_status
+
             if token.blank?
               return render json: {
                 connected: false,
                 clients: [],
                 pickup_locations: [],
-                has_delhivery_profile: has_delhivery_profile?
+                has_delhivery_profile: profile_status[:assigned],
+                delhivery_info: profile_status
               }
             end
 
@@ -32,17 +37,21 @@ module Spree
               connected: connected,
               clients: clients,
               pickup_locations: pickup_locations,
-              has_delhivery_profile: has_delhivery_profile?
+              has_delhivery_profile: profile_status[:assigned],
+              delhivery_info: profile_status
             }
           end
 
           def ensure_profiles
-            integ = integration || SpreeDelhivery::Integration.new(store: current_store)
+            integ = integration || SpreeDelhivery::Integration.find_or_initialize_by(store: current_store)
             integ.ensure_delivery_profile_and_methods!
+
+            profile_status = check_delhivery_profiles_status
 
             render json: {
               success: true,
-              has_delhivery_profile: has_delhivery_profile?
+              has_delhivery_profile: profile_status[:assigned],
+              delhivery_info: profile_status
             }
           rescue StandardError => e
             render json: { error: e.message }, status: :unprocessable_entity
@@ -54,14 +63,28 @@ module Spree
             @integration ||= SpreeDelhivery::Integration.find_by(store: current_store)
           end
 
-          def has_delhivery_profile
-            profile = Spree::DeliveryProfiles::Shipping.find_by(name: 'Delhivery', store: current_store)
-            return false if profile.nil?
+          def check_delhivery_profiles_status
+            delhivery_profile = Spree::DeliveryProfile.find_by('LOWER(name) = ? AND store_id = ?', 'delhivery', current_store.id)
 
-            codes = profile.delivery_methods.pluck(:code)
-            codes.include?('DELHIVERY_EXPRESS') && codes.include?('DELHIVERY_SURFACE')
+            delhivery_methods = Spree::DeliveryMethod.where(store_id: current_store.id).select do |m|
+              m.name.to_s =~ /delhivery/i ||
+                m.code.to_s =~ /delhivery/i ||
+                m.rate_provider.to_s =~ /delhivery/i ||
+                m.fulfillment_provider.to_s =~ /delhivery/i ||
+                (m.respond_to?(:services) && m.services.any? { |s| s.carrier.to_s =~ /delhivery/i || s.service.to_s =~ /delhivery/i })
+            end
+
+            assigned = delhivery_profile.present? || delhivery_methods.any?
+            profile_name = delhivery_profile&.name || delhivery_methods.first&.delivery_profile&.name || 'Delhivery'
+            method_names = (delhivery_methods.map(&:name) + (delhivery_profile ? delhivery_profile.delivery_methods.pluck(:name) : [])).uniq
+
+            {
+              assigned: assigned,
+              profile_name: profile_name,
+              methods: method_names,
+              is_default: delhivery_profile&.default? || false
+            }
           end
-          alias has_delhivery_profile? has_delhivery_profile
         end
       end
     end
