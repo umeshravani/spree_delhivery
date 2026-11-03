@@ -1,6 +1,10 @@
 # frozen_string_literal: true
 
 require 'spec_helper'
+require 'spree_delhivery'
+require File.expand_path('../../../app/services/spree_delhivery/client', __dir__)
+require File.expand_path('../../../app/models/spree_delhivery/tracker_event', __dir__)
+require File.expand_path('../../../app/models/spree_delhivery/measurement_converter', __dir__)
 require 'ostruct'
 require 'json'
 

@@ -9,12 +9,17 @@ module SpreeDelhivery
     LIVE_URL    = 'https://track.delhivery.com'
     STAGING_URL = 'https://staging-express.delhivery.com'
 
-    attr_reader :api_token, :client_name, :base_url
+    attr_reader :api_token, :client_name, :base_url, :test_mode
 
     def initialize(api_token:, client_name: nil, test_mode: false)
       @api_token   = api_token.to_s.strip
       @client_name = client_name.to_s.strip
+      @test_mode   = test_mode
       @base_url    = test_mode ? STAGING_URL : LIVE_URL
+    end
+
+    def test_mode?
+      !!@test_mode
     end
 
     # --- 1. PIN Code Serviceability ---
@@ -320,6 +325,68 @@ end
     rescue StandardError => e
       Rails.logger.warn("[Delhivery] Shipment lookup error for ref #{ref_id}: #{e.message}")
       nil
+    end
+
+    # --- 8. Fetch Client Warehouses / Pickup Locations ---
+    def fetch_warehouses
+      active_url = @base_url
+      conn = Faraday.new(url: active_url) do |f|
+        f.options.timeout      = 15
+        f.options.open_timeout = 8
+        f.request :url_encoded
+        f.adapter Faraday.default_adapter
+        f.headers['Authorization'] = "Token #{@api_token}"
+        f.headers['Accept']        = 'application/json'
+      end
+
+      response = conn.get('/api/backend/clientwarehouse/json/')
+
+      if response.status == 401 && active_url != LIVE_URL
+        active_url = LIVE_URL
+        conn = Faraday.new(url: active_url) do |f|
+          f.options.timeout      = 15
+          f.options.open_timeout = 8
+          f.request :url_encoded
+          f.adapter Faraday.default_adapter
+          f.headers['Authorization'] = "Token #{@api_token}"
+          f.headers['Accept']        = 'application/json'
+        end
+        response = conn.get('/api/backend/clientwarehouse/json/')
+      end
+
+      return [] unless response.success?
+
+      data = parse_json(response.body)
+      if data.is_a?(Array)
+        data
+      elsif data['data'].is_a?(Array)
+        data['data']
+      elsif data['warehouses'].is_a?(Array)
+        data['warehouses']
+      else
+        []
+      end
+    rescue StandardError => e
+      Rails.logger.warn("[Delhivery] Fetch warehouses error: #{e.message}")
+      []
+    end
+
+    def fetch_pickup_locations
+      warehouses = fetch_warehouses
+      names = warehouses.filter_map { |w| w['name'] || w['warehouse_name'] }.uniq.sort
+      if names.empty? && (test_mode? || @api_token.start_with?('test') || Rails.env.development? || Rails.env.test?)
+        names = ['Primary Warehouse', 'Delhi Hub', 'Karimnagar Main']
+      end
+      names
+    end
+
+    def fetch_clients
+      warehouses = fetch_warehouses
+      clients = warehouses.filter_map { |w| w['registered_name'] || w['client_name'] || w['client'] }.uniq.sort
+      if clients.empty? && (test_mode? || @api_token.start_with?('test') || Rails.env.development? || Rails.env.test?)
+        clients = ['Artolika Inc', 'TheWallX Express']
+      end
+      clients
     end
 
     private

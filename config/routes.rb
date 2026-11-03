@@ -7,6 +7,11 @@ Spree::Core::Engine.add_routes do
         get 'delhivery/serviceability', to: 'delhivery#serviceability'
         get 'delhivery/check', to: 'delhivery#serviceability'
       end
+
+      namespace :admin do
+        get 'delhivery/metadata', to: 'delhivery#metadata'
+        post 'delhivery/ensure_profiles', to: 'delhivery#ensure_profiles'
+      end
     end
   end
 end
