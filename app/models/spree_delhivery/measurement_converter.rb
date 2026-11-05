@@ -35,7 +35,7 @@ module SpreeDelhivery
                end
              end
 
-        [cm.to_f.round(2), MIN_DIMENSION_CM].max
+        cm.to_f.round(2)
       end
 
       # Normalizes weight values into grams (g)
@@ -63,7 +63,7 @@ module SpreeDelhivery
                   end
                 end
 
-        [grams.to_f.round(2), MIN_WEIGHT_GRAMS].max
+        grams.to_f.round(2)
       end
 
       # Computes dead weight in grams for an entire package or fulfillment

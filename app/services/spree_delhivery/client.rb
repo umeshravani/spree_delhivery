@@ -373,20 +373,12 @@ end
 
     def fetch_pickup_locations
       warehouses = fetch_warehouses
-      names = warehouses.filter_map { |w| w['name'] || w['warehouse_name'] }.uniq.sort
-      if names.empty? && (test_mode? || @api_token.start_with?('test') || Rails.env.development? || Rails.env.test?)
-        names = ['Primary Warehouse', 'Delhi Hub', 'Karimnagar Main']
-      end
-      names
+      warehouses.filter_map { |w| w['name'] || w['warehouse_name'] }.uniq.sort
     end
 
     def fetch_clients
       warehouses = fetch_warehouses
-      clients = warehouses.filter_map { |w| w['registered_name'] || w['client_name'] || w['client'] }.uniq.sort
-      if clients.empty? && (test_mode? || @api_token.start_with?('test') || Rails.env.development? || Rails.env.test?)
-        clients = ['Artolika Inc', 'TheWallX Express']
-      end
-      clients
+      warehouses.filter_map { |w| w['registered_name'] || w['client_name'] || w['client'] }.uniq.sort
     end
 
     private

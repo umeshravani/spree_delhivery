@@ -48,7 +48,7 @@ module SpreeDelhivery
         metadata = locked_owner.respond_to?(:metadata) && locked_owner.metadata.is_a?(Hash) ? locked_owner.metadata : {}
         state = metadata['delhivery_booking_state']
         started_at_str = metadata['delhivery_booking_started_at']
-        started_at = started_at_str.present? ? (Time.zone.parse(started_at_str) rescue nil) : nil
+        started_at = started_at_str.present? ? (Time.zone&.parse(started_at_str) || Time.parse(started_at_str) rescue nil) : nil
 
         # If a booking is currently in progress within the past 45 seconds, reject concurrent call
         if state == 'in_progress' && started_at.present? && started_at > 45.seconds.ago

@@ -5,6 +5,19 @@ require 'spree_delhivery'
 require File.expand_path('../../../app/services/spree_delhivery/client', __dir__)
 require File.expand_path('../../../app/models/spree_delhivery/tracker_event', __dir__)
 require File.expand_path('../../../app/models/spree_delhivery/measurement_converter', __dir__)
+module Spree
+  class Return; end
+  LabelPurchase = Struct.new(:external_id, :carrier, :service, :tracking_number, :tracking_url, :cost, :currency, :format, :file_url, :metadata, keyword_init: true)
+  module FulfillmentProvider
+    class Base
+      def integration_for(target); end
+    end
+  end
+  module Core
+  end
+end
+Spree::Core::LabelPurchaseRefused ||= Class.new(StandardError)
+require File.expand_path('../../../app/models/spree_delhivery/fulfillment_provider', __dir__)
 require 'ostruct'
 require 'json'
 
