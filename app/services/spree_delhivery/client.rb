@@ -173,7 +173,7 @@ end
       end
 
       pkg = data['packages']&.first
-      if pkg.nil? || pkg['status'] != 'Success'
+      if pkg.nil? || pkg['status'] != 'Success' || pkg['waybill'].blank?
         remarks = Array(pkg&.dig('remarks')).join(', ').presence || data['rmk'] || data['cash_status'] || 'Shipment creation failed'
         raise Spree::Core::LabelPurchaseRefused, "Delhivery rejected shipment: #{remarks}"
       end
@@ -187,26 +187,35 @@ end
 
     # --- 4. Fetch Official Delhivery PDF Label URL ---
     def fetch_packing_slip_url(waybill:)
-      response = connection.get('/api/p/packing_slip') do |req|
-        req.params['wbns']     = waybill.to_s.strip
-        req.params['pdf']      = 'true'
-        req.params['pdf_size'] = '4R' # 4x6 standard format
-      end
+      wbns = waybill.to_s.strip
+      return nil if wbns.blank?
 
-      if response.status == 401 && @base_url != LIVE_URL
-        response = connection(LIVE_URL).get('/api/p/packing_slip') do |req|
-          req.params['wbns']     = waybill.to_s.strip
+      attempts = 0
+      loop do
+        attempts += 1
+        response = connection.get('/api/p/packing_slip') do |req|
+          req.params['wbns']     = wbns
           req.params['pdf']      = 'true'
-          req.params['pdf_size'] = '4R'
+          req.params['pdf_size'] = '4R' # 4x6 standard format
         end
-      end
 
-      if response.success?
-        data = parse_json(response.body)
-        pkg = data['packages']&.first
-        pkg&.dig('pdf_download_link')
-      else
-        nil
+        if response.status == 401 && @base_url != LIVE_URL
+          response = connection(LIVE_URL).get('/api/p/packing_slip') do |req|
+            req.params['wbns']     = wbns
+            req.params['pdf']      = 'true'
+            req.params['pdf_size'] = '4R'
+          end
+        end
+
+        if response.success?
+          data = parse_json(response.body)
+          link = data['packages']&.first&.dig('pdf_download_link')
+          return link if link.present?
+        end
+
+        return nil if attempts >= 2
+
+        sleep(0.35)
       end
     rescue StandardError => e
       Rails.logger.error("[Delhivery] Packing slip fetch error: #{e.message}")
@@ -239,18 +248,20 @@ end
     def register_warehouse(name:, address:, city:, pin:, phone:, registered_name: nil, return_address: nil, return_city: nil, return_pin: nil)
       clean_phone = phone.to_s.gsub(/\D/, '').last(10).presence || '9999999999'
       clean_pin   = pin.to_s.gsub(/\D/, '').strip
-      full_addr   = address.to_s.truncate(200)
+      full_addr   = address.to_s.gsub(/[\r\n\t]+/, ' ').strip.presence || name.to_s
+      full_addr   = full_addr.truncate(200)
+      clean_city  = city.to_s.strip.presence || 'New Delhi'
 
       warehouse_payload = {
         name: name.to_s.truncate(50),
         registered_name: (registered_name.presence || name).to_s.truncate(50),
         phone: clean_phone,
         address: full_addr,
-        city: city.to_s.truncate(50),
+        city: clean_city.truncate(50),
         pin: clean_pin,
         country: 'India',
         return_address: (return_address.presence || full_addr).to_s.truncate(200),
-        return_city: (return_city.presence || city).to_s.truncate(50),
+        return_city: (return_city.presence || clean_city).to_s.truncate(50),
         return_pin: (return_pin.presence || clean_pin),
         return_country: 'India'
       }
