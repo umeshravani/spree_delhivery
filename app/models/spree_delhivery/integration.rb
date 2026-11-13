@@ -16,7 +16,7 @@ module SpreeDelhivery
 
     validates :preferred_api_token, :preferred_client_name, presence: true
 
-    after_save :ensure_delivery_profile_and_methods!, if: :saved_change_to_active?
+    after_save :ensure_delivery_profile_and_methods!, if: -> { active? }
 
     def self.integration_group
       'shipping'
@@ -101,6 +101,13 @@ module SpreeDelhivery
         express_svc.position = 1
         express_svc.save!
       end
+
+      # 3. Ensure Delhivery COD Payment Method
+      cod = Spree::PaymentMethod::DelhiveryCod.find_or_initialize_by(type: 'Spree::PaymentMethod::DelhiveryCod', store: store)
+      cod.name = 'Cash on Delivery (Delhivery COD)' if cod.name.blank?
+      cod.active = true
+      cod.storefront_visible = true
+      cod.save!
 
       # Remove obsolete separate profiles if they exist
       Spree::DeliveryProfiles::Shipping.where(store: store, name: ['Delhivery Express', 'Delhivery Surface']).where.not(id: profile.id).destroy_all

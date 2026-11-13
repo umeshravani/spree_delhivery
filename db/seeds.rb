@@ -65,14 +65,12 @@ ActiveRecord::Base.transaction do
     # 5. Clean up any obsolete separate profiles
     Spree::DeliveryProfiles::Shipping.where(store: store, name: ['Delhivery Express', 'Delhivery Surface']).where.not(id: delhivery_profile.id).destroy_all
 
-    # 6. COD Payment Method (Optional payment integration)
+    # 6. COD Payment Method
     cod = Spree::PaymentMethod::DelhiveryCod.find_or_initialize_by(type: 'Spree::PaymentMethod::DelhiveryCod', store: store)
-    if cod.new_record?
-      cod.name = 'Cash on Delivery (Delhivery COD)'
-      cod.active = is_configured
-      cod.storefront_visible = is_configured
-      cod.save!
-    end
+    cod.name = 'Cash on Delivery (Delhivery COD)' if cod.name.blank?
+    cod.active = true
+    cod.storefront_visible = true
+    cod.save!
 
     puts "[SpreeDelhivery] ✓ Configured single 'Delhivery' profile with Express and Surface methods for Store '#{store.name}'."
   end
