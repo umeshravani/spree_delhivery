@@ -1,15 +1,20 @@
 # frozen_string_literal: true
 
+require 'base64'
+
 module Spree
   class PaymentMethod < Spree::Base
     class DelhiveryCod < Spree::PaymentMethod
       self.accepts_money_amounts = true
 
-      DELHIVERY_SVG_PATH = File.expand_path('../../assets/images/spree_delhivery/delhivery-icon.svg', __dir__)
-      DELHIVERY_PNG_PATH = File.expand_path('../../assets/images/spree_delhivery/delhivery-icon.png', __dir__)
+      DELHIVERY_COD_SVG_PATH = File.expand_path('../../../assets/images/spree_delhivery/delhivery_cod.svg', __dir__)
+      DELHIVERY_SVG_PATH = File.expand_path('../../../assets/images/spree_delhivery/delhivery-icon.svg', __dir__)
+      DELHIVERY_PNG_PATH = File.expand_path('../../../assets/images/spree_delhivery/delhivery-icon.png', __dir__)
 
       def self.logo_url
-        if File.exist?(DELHIVERY_SVG_PATH)
+        if File.exist?(DELHIVERY_COD_SVG_PATH)
+          "data:image/svg+xml;base64,#{Base64.strict_encode64(File.read(DELHIVERY_COD_SVG_PATH))}"
+        elsif File.exist?(DELHIVERY_SVG_PATH)
           "data:image/svg+xml;base64,#{Base64.strict_encode64(File.read(DELHIVERY_SVG_PATH))}"
         elsif File.exist?(DELHIVERY_PNG_PATH)
           "data:image/png;base64,#{Base64.strict_encode64(File.read(DELHIVERY_PNG_PATH))}"
@@ -20,6 +25,14 @@ module Spree
 
       def self.docs_url
         'https://www.delhivery.com'
+      end
+
+      def logo_url
+        self.class.logo_url
+      end
+
+      def docs_url
+        self.class.docs_url
       end
 
       def actions

@@ -48,3 +48,4 @@ module Spree
 end
 
 Spree::Carts::Update.prepend(Spree::Carts::UpdateDecorator)
+

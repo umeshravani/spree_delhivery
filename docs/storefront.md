@@ -205,6 +205,34 @@ if (result.success && result.session) {
 
 ---
 
+### 6. Display Delhivery Logo for Cash on Delivery
+
+To display the official Delhivery brand logo alongside "Cash on Delivery (Delhivery COD)" in the checkout payment method selector (matching the Razorpay badge style):
+
+1. **Copy the Delhivery Logo into your Storefront public folder**:
+   Copy `delhivery-logo.svg` from the gem's assets (`app/assets/images/spree_delhivery/delhivery-logo.svg`) to `apps/storefront/public/delhivery-logo.svg`.
+
+2. **Render in `PaymentSection.tsx`**:
+   In `apps/storefront/src/components/checkout/PaymentSection.tsx`, locate the payment method header rendering and display the logo:
+
+   ```tsx
+   {/* Single or Multi Method Delhivery Logo */}
+   {(pm.name.toLowerCase().includes("cash on delivery") ||
+     pm.type === "delhivery_cod" ||
+     pm.type?.includes("DelhiveryCod") ||
+     pm.name.toLowerCase().includes("cod")) && (
+     <Image
+       src="/delhivery-logo.svg"
+       alt="Delhivery"
+       width={80}
+       height={16}
+       className="h-4 w-auto object-contain"
+     />
+   )}
+   ```
+
+---
+
 ## Part 2: Backend Lookup Decorator
 
 To allow customers to look up tracking details by **Order Number** (`R1026-1`), **Delhivery Waybill / AWB** (`32966010002730`), **Customer Email**, or **Phone Number**:
