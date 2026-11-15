@@ -2,7 +2,7 @@
 
 # Spree Delhivery (Spree 6 Commerce)
 
-[![Spree Commerce](https://img.shields.io/badge/Spree-6.0.1%20Tested-red.svg)](https://spreecommerce.org)
+[![Spree Commerce](https://img.shields.io/badge/Spree-6.0.4%20Tested-green.svg)](https://spreecommerce.org)
 [![Rails Version](https://img.shields.io/badge/Rails-8.1.4-blue.svg)](https://rubyonrails.org)
 [![Ruby Version](https://img.shields.io/badge/Ruby-4.0.9-ruby.svg)](https://www.ruby-lang.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -35,7 +35,7 @@ Provides real-time shipping rate calculation, automated AWB generation, multi-ve
 
 | Component | Verified Tested Version | Intended Compatibility Range |
 |:---|:---|:---|
-| **Spree Commerce** | `6.0.1` | `~> 6.0.0` |
+| **Spree Commerce** | `6.0.4` | `~> 6.0.0` |
 | **Ruby on Rails** | `8.1.4` | `>= 7.1.0, < 9.0.0` |
 | **Ruby** | `4.0.9` | `>= 3.2.0` |
 | **Storefront** | Next.js `16.0.x` | Spree 6 Next.js Storefront (API V3) |
@@ -131,11 +131,8 @@ The `spree_delhivery` gem provides backend rates, fulfillments, and adjusters. F
 
 ## Screenshots
 
-| Admin Integrations Gallery | Storefront Live Tracking (Optional) |
-|:---:|:---:|
-| ![Delhivery Integration](./docs/assets/screenshots/01-admin-integrations-gallery.png) | ![Live Tracking](./docs/assets/screenshots/07-storefront-order-tracking-timeline.png) |
-
-*For the complete screenshot inventory and masking checklist, see [docs/screenshots.md](./docs/screenshots.md).*
+<img width="1369" height="845" alt="Delhivery Profiles Spree 6" src="https://github.com/user-attachments/assets/b1b3f8b4-29b6-4cb0-8c1d-3f4e293c617e" />
+<img width="1202" height="1004" alt="Delhivery Checkout Page Spree 6" src="https://github.com/user-attachments/assets/315b41c9-962e-4bc6-a2fc-e230c7e55d1a" />
 
 ---
 
