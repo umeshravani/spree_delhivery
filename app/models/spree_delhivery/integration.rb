@@ -102,12 +102,20 @@ module SpreeDelhivery
         express_svc.save!
       end
 
-      # 3. Ensure Delhivery COD Payment Method
+      # 3. Ensure Delhivery COD Payment Method (clean name 'Cash on Delivery')
       cod = Spree::PaymentMethod::DelhiveryCod.find_or_initialize_by(type: 'Spree::PaymentMethod::DelhiveryCod', store: store)
-      cod.name = 'Cash on Delivery (Delhivery COD)' if cod.name.blank?
+      cod.name = 'Cash on Delivery'
       cod.active = true
       cod.storefront_visible = true
       cod.save!
+
+      # 4. Ensure store default delivery profile & reassign products on empty shipping profiles
+      store.update!(default_delivery_profile: profile) unless store.default_delivery_profile_id == profile.id
+      empty_profile_ids = Spree::DeliveryProfiles::Shipping.where(store: store).select { |p| p.delivery_methods.empty? }.map(&:id)
+      if empty_profile_ids.any?
+        Spree::Product.where(store: store, delivery_profile_id: empty_profile_ids).update_all(delivery_profile_id: profile.id)
+      end
+      Spree::Product.where(store: store, delivery_profile_id: nil).update_all(delivery_profile_id: profile.id)
 
       # Remove obsolete separate profiles if they exist
       Spree::DeliveryProfiles::Shipping.where(store: store, name: ['Delhivery Express', 'Delhivery Surface']).where.not(id: profile.id).destroy_all

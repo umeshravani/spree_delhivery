@@ -3,12 +3,15 @@
 class EnsureSpreeDelhiveryRecords < ActiveRecord::Migration[7.2]
   def up
     Spree::Store.all.each do |store|
-      # 1. COD Payment Method
+      # 1. COD Payment Method (clean name 'Cash on Delivery')
       cod = Spree::PaymentMethod::DelhiveryCod.find_or_initialize_by(type: 'Spree::PaymentMethod::DelhiveryCod', store: store)
-      cod.name = 'Cash on Delivery (Delhivery COD)' if cod.name.blank?
+      cod.name = 'Cash on Delivery'
       cod.active = true
       cod.storefront_visible = true
       cod.save!
+
+      # Rename any existing COD records
+      Spree::PaymentMethod::DelhiveryCod.where(store: store).update_all(name: 'Cash on Delivery')
 
       # 2. Delhivery Integration (if not existing)
       integration = store.integrations.find_or_initialize_by(type: 'SpreeDelhivery::Integration')
@@ -20,6 +23,14 @@ class EnsureSpreeDelhiveryRecords < ActiveRecord::Migration[7.2]
         p.default = true
       end
       profile.update!(default: true) unless profile.default?
+      store.update!(default_delivery_profile: profile) unless store.default_delivery_profile_id == profile.id
+
+      # Reassign products on empty shipping profiles to the active profile
+      empty_profile_ids = Spree::DeliveryProfiles::Shipping.where(store: store).select { |p| p.delivery_methods.empty? }.map(&:id)
+      if empty_profile_ids.any?
+        Spree::Product.where(store: store, delivery_profile_id: empty_profile_ids).update_all(delivery_profile_id: profile.id)
+      end
+      Spree::Product.where(store: store, delivery_profile_id: nil).update_all(delivery_profile_id: profile.id)
 
       origin_group = profile.delivery_origin_groups.first_or_create!
 
