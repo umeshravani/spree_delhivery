@@ -109,7 +109,12 @@ module SpreeDelhivery
       cod.storefront_visible = true
       cod.save!
 
-      # 4. Ensure store default delivery profile & reassign products on empty shipping profiles
+      # 4. Ensure stock locations have valid origin pin
+      Spree::StockLocation.where(zipcode: [nil, '']).find_each do |loc|
+        loc.update_columns(zipcode: '110001', city: 'New Delhi', address1: 'Warehouse Hub', country_code: 'IN')
+      end
+
+      # 5. Ensure store default delivery profile & reassign products on empty shipping profiles
       profile.update!(default: true) unless profile.default?
       empty_profile_ids = Spree::DeliveryProfiles::Shipping.where(store: store).select { |p| p.delivery_methods.empty? }.map(&:id)
       if empty_profile_ids.any?
