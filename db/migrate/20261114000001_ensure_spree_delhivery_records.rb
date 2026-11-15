@@ -23,7 +23,6 @@ class EnsureSpreeDelhiveryRecords < ActiveRecord::Migration[7.2]
         p.default = true
       end
       profile.update!(default: true) unless profile.default?
-      store.update!(default_delivery_profile: profile) unless store.default_delivery_profile_id == profile.id
 
       # Reassign products on empty shipping profiles to the active profile
       empty_profile_ids = Spree::DeliveryProfiles::Shipping.where(store: store).select { |p| p.delivery_methods.empty? }.map(&:id)

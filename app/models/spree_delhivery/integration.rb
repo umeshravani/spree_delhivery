@@ -110,7 +110,7 @@ module SpreeDelhivery
       cod.save!
 
       # 4. Ensure store default delivery profile & reassign products on empty shipping profiles
-      store.update!(default_delivery_profile: profile) unless store.default_delivery_profile_id == profile.id
+      profile.update!(default: true) unless profile.default?
       empty_profile_ids = Spree::DeliveryProfiles::Shipping.where(store: store).select { |p| p.delivery_methods.empty? }.map(&:id)
       if empty_profile_ids.any?
         Spree::Product.where(store: store, delivery_profile_id: empty_profile_ids).update_all(delivery_profile_id: profile.id)
