@@ -23,3 +23,4 @@ class EnsureDelhiveryStockLocationsAndProfiles < ActiveRecord::Migration[7.2]
     # Reversible no-op
   end
 end
+
