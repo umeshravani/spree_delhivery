@@ -205,6 +205,24 @@ if (result.success && result.session) {
 
 ---
 
+### 6. Display Blue COD Badge in Payment Methods
+
+In `apps/storefront/src/components/checkout/PaymentSection.tsx`, render the clean blue COD badge alongside the payment method name:
+
+```tsx
+{(pm.name.toLowerCase().includes("cash on delivery") ||
+  pm.type === "delhivery_cod" ||
+  pm.type?.includes("DelhiveryCod") ||
+  pm.name.toLowerCase().includes("cod")) && (
+  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-800 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded">
+    <Truck className="w-3 h-3 text-blue-600" />
+    COD
+  </span>
+)}
+```
+
+---
+
 ## Part 2: Backend Lookup Decorator
 
 To allow customers to look up tracking details by **Order Number** (`R1026-1`), **Delhivery Waybill / AWB** (`32966010002730`), **Customer Email**, or **Phone Number**:
