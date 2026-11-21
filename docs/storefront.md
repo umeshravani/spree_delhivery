@@ -6,9 +6,10 @@
 
 This comprehensive guide details how to integrate **Spree Delhivery** with the Spree 6 Next.js Storefront (`apps/storefront`).
 
-It covers two core experiences:
+It covers three core experiences:
 1. **Dynamic Cash on Delivery (COD) Surcharge** in checkout.
 2. **Production Order Tracking & Live Delhivery API Integration** with customer search and milestone timeline.
+3. **PDP Pincode Serviceability & Saved Address Selection Modal** for instant PIN code checking and address book selection.
 
 ---
 
@@ -502,4 +503,78 @@ export default async function OrderSearchPage({
   return <OrderLookupView basePath={basePath} />;
 }
 ```
+
+---
+
+## Part 5: PDP Pincode Serviceability & Saved Address Selection Modal
+
+To give customers instant clarity on delivery estimates, cash on delivery (COD) availability, and shipping timelines directly on the Product Details Page (PDP):
+
+### 1. `PincodeChecker` Component
+**File:** `apps/storefront/src/components/products/PincodeChecker.tsx`
+
+The component handles:
+- **PIN Code Validation & Serviceability**: Calling the Delhivery serviceability API to verify delivery speed, expected delivery dates, and COD eligibility.
+- **Delivery Location Modal**: Logged-in customers can select an existing address from their account address book or input a new 6-digit postal code.
+- **Design System Consistency**: The selected saved address card is highlighted with a crisp black border (`border-2 border-neutral-900 bg-neutral-50/80` and `accent-neutral-900`) instead of default browser/system blue, ensuring alignment with the storefront's minimal monochrome styling.
+
+```tsx
+{/* Saved Addresses Modal List */}
+<div className="max-h-[48vh] overflow-y-auto space-y-2 pr-1">
+  {savedAddresses.map((addr) => {
+    const isSelected =
+      location?.pincode === addr.pincode &&
+      (!location?.address1 || location.address1 === addr.address1);
+
+    return (
+      <div
+        key={addr.id || `${addr.pincode}-${addr.address1}`}
+        onClick={() => handleSelectSavedAddress(addr)}
+        className={`p-3.5 rounded-xl text-xs cursor-pointer transition-all flex items-start gap-3 ${
+          isSelected
+            ? "border-2 border-neutral-900 bg-neutral-50/80 shadow-xs"
+            : "border border-neutral-200 hover:border-neutral-300 bg-white"
+        }`}
+      >
+        <input
+          type="radio"
+          name="saved-address"
+          checked={isSelected}
+          onChange={() => handleSelectSavedAddress(addr)}
+          className="mt-0.5 h-4 w-4 accent-neutral-900 cursor-pointer"
+        />
+        <div className="flex-1 space-y-0.5">
+          <div className="font-semibold text-neutral-900">
+            {addr.fullName || "Delivery Address"}
+          </div>
+          {addr.address1 && (
+            <div className="text-neutral-600 line-clamp-1">
+              {addr.address1}
+            </div>
+          )}
+          <div className="font-medium text-neutral-800">
+            {addr.city ? `${addr.city}, ` : ""}
+            {addr.state ? `${addr.state} - ` : ""}
+            {addr.pincode}
+          </div>
+        </div>
+      </div>
+    );
+  })}
+</div>
+```
+
+### 2. Including `PincodeChecker` on the Product Details Page
+**File:** `apps/storefront/src/app/[country]/[locale]/(storefront)/products/[slug]/page.tsx`
+
+Place `<PincodeChecker />` inside the product purchase panel adjacent to delivery information or action buttons:
+
+```tsx
+<PincodeChecker
+  deliveryDays={deliveryDays}
+  cutoffTime={cutoffTime}
+  freeShippingThreshold={freeShippingThreshold}
+/>
+```
+
 
